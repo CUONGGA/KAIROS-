@@ -1,0 +1,25 @@
+[project]
+name = "kairos"
+version = "0.0.1"
+authors = [
+	{ name = "CUONGGA", email = "cuongtoi124@gmail.com" }
+]
+description = "Kairos AI Work Assistant"
+requires-python = ">=3.10"
+readme = "README.md"
+dependencies = []
+
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.flit.module]
+name = "kairos"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "tab"

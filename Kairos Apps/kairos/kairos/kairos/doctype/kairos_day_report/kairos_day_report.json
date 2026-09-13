@@ -1,0 +1,83 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "field:report_date",
+ "creation": "2026-08-31 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "report_date",
+  "status",
+  "content_section",
+  "timeline_text",
+  "summary_text"
+ ],
+ "fields": [
+  {
+   "fieldname": "report_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Report Date",
+   "reqd": 1,
+   "search_index": 1,
+   "unique": 1
+  },
+  {
+   "default": "draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "draft\nready\nerror",
+   "reqd": 1
+  },
+  {
+   "fieldname": "content_section",
+   "fieldtype": "Section Break",
+   "label": "Report Content"
+  },
+  {
+   "description": "Timeline aggregated from Kairos Events. Phase C will generate this automatically.",
+   "fieldname": "timeline_text",
+   "fieldtype": "Long Text",
+   "label": "Timeline"
+  },
+  {
+   "description": "Daily report ready to copy or send. Phase C will generate it with an LLM or fallback.",
+   "fieldname": "summary_text",
+   "fieldtype": "Long Text",
+   "label": "Summary"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-31 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kairos",
+ "name": "Kairos Day Report",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "report_date,status",
+ "sort_field": "report_date",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "report_date",
+ "track_changes": 1
+}

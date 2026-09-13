@@ -1,0 +1,4 @@
+{"timestamp":"2026-09-01T02:00:00Z","type":"session_meta","payload":{"id":"session-mapper-001","cwd":"C:/Projects/Kairos Apps","originator":"cli"}}
+{"timestamp":"2026-09-01T02:00:01Z","type":"event_msg","payload":{"type":"user_message","message":"Implement the Codex event mapper."}}
+{"timestamp":"2026-09-01T02:00:20Z","type":"response_item","payload":{"type":"function_call","id":"call-1","name":"exec_command"}}
+{"timestamp":"2026-09-01T02:00:30Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-001","duration_ms":30000,"last_agent_message":"Implemented the mapper."}}

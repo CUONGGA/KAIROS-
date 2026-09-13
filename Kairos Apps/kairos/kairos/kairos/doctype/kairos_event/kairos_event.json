@@ -1,0 +1,202 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "field:event_id",
+ "creation": "2026-08-10 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "identity_section",
+  "event_id",
+  "source",
+  "external_id",
+  "column_break_identity",
+  "kind",
+  "status",
+  "collector_version",
+  "timing_section",
+  "occurred_at",
+  "activity_date",
+  "collected_at",
+  "duration_seconds",
+  "content_section",
+  "title",
+  "summary",
+  "project",
+  "tags",
+  "raw_section",
+  "raw_payload"
+ ],
+ "fields": [
+  {
+   "fieldname": "identity_section",
+   "fieldtype": "Section Break",
+   "label": "Identity"
+  },
+  {
+   "description": "Canonical id: {source}:{external_id}. D\u00f9ng cho idempotent upsert.",
+   "fieldname": "event_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Event ID",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Source",
+   "options": "codex\ngit\nfrappe\nterminal\nchatgpt\ncursor_cli\nother",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "external_id",
+   "fieldtype": "Data",
+   "label": "External ID",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_identity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Kind",
+   "options": "\nsession\nmessage\nagent_run\ncommand\ncommit\nfile_change\ndesk_action\nnote\nother"
+  },
+  {
+   "default": "unknown",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "ok\nerror\ncancelled\nunknown"
+  },
+  {
+   "description": "Mapper version, e.g. codex@1",
+   "fieldname": "collector_version",
+   "fieldtype": "Data",
+   "label": "Collector Version"
+  },
+  {
+   "fieldname": "timing_section",
+   "fieldtype": "Section Break",
+   "label": "Timing"
+  },
+  {
+   "description": "Th\u1eddi \u0111i\u1ec3m s\u1ef1 ki\u1ec7n (UTC).",
+   "fieldname": "occurred_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Occurred At",
+   "reqd": 1
+  },
+  {
+   "description": "Derived t\u1eeb occurred_at theo Asia/Ho_Chi_Minh.",
+   "fieldname": "activity_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Activity Date",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "collected_at",
+   "fieldtype": "Datetime",
+   "label": "Collected At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "duration_seconds",
+   "fieldtype": "Float",
+   "label": "Duration Seconds"
+  },
+  {
+   "fieldname": "content_section",
+   "fieldtype": "Section Break",
+   "label": "Content"
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "length": 255,
+   "reqd": 1
+  },
+  {
+   "fieldname": "summary",
+   "fieldtype": "Text",
+   "label": "Summary"
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Project"
+  },
+  {
+   "description": "Comma-separated lowercase tags, e.g. session:abc,cli",
+   "fieldname": "tags",
+   "fieldtype": "Small Text",
+   "label": "Tags"
+  },
+  {
+   "fieldname": "raw_section",
+   "fieldtype": "Section Break",
+   "label": "Raw"
+  },
+  {
+   "description": "JSON subset for debug / re-map. Kh\u00f4ng \u0111\u01b0a nguy\u00ean v\u00e0o Copy b\u00e1o c\u00e1o.",
+   "fieldname": "raw_payload",
+   "fieldtype": "Code",
+   "label": "Raw Payload",
+   "options": "JSON"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kairos",
+ "name": "Kairos Event",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Kairos Collector",
+   "write": 1
+  }
+ ],
+ "search_fields": "title,source,project,tags",
+ "sort_field": "occurred_at",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}

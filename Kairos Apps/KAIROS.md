@@ -435,16 +435,206 @@ Kairos Apps/
 
 ## Kế hoạch triển khai MVP
 
-| Phase | Việc | Done khi |
-|-------|------|----------|
-| **A — Frappe app** | Scaffold app `kairos`; 3 DocTypes; API whitelist `upsert_events` (batch idempotent theo `event_id`) | Gọi API từ Postman tạo được Event trên VPS |
-| **B — Collector Dev** | CLI `kairos-codex sync`: scan sessions → map `codex@1` → POST batch; Task Scheduler 30 phút | Chạy tay 1 lần → Event hiện trên Desk |
-| **C — Day Report** | Job/nút Generate: gom Event theo `activity_date` → LLM summary → `Kairos Day Report`; nút **Copy to Clipboard** | Copy paste được báo cáo ngày vào Teams |
-| **D — Soft launch** | 3–5 ngày dùng thật 1 user; chỉnh heuristic emit; ghi chú lỗi parse JSONL | Báo cáo dùng được hàng ngày không sửa tay nhiều |
+**Thứ tự bắt buộc:** A → B → C → D (xong gate phase trước mới sang phase sau).  
+Không làm SPA, PAD/AHK, multi-collector trong MVP.
 
-**Thứ tự bắt buộc:** A → B → C → D. Không làm SPA, PAD/AHK, multi-collector trong MVP.
+---
 
-**Backlog sau MVP:** Git / Cursor CLI / ChatGPT collectors; service nền; Teams webhook; Compliance API; multi-user.
+### Phase A — Frappe app
+
+**Mục tiêu phase:** App `kairos` trên bench nhận được batch Event từ ngoài qua API, lưu DocType ổn định.
+
+**A1 — Scaffold + bench** [x]  
+Hướng dẫn: [`docs/A1-BENCH-INSTALL.md`](./docs/A1-BENCH-INSTALL.md).
+
+#### A2 — DocType `Kairos Settings` (Single) [x]
+
+**Mục tiêu A2:** Có 1 màn hình cấu hình non-secret trên Desk; Phase C đọc model/prompt từ đây. **Không** chứa API key (key = `site_config` / env → A5).
+
+**Phạm vi làm**
+
+| Việc | Chi tiết |
+|------|----------|
+| Tạo DocType | `Kairos Settings`, **issingle = 1**, module `Kairos` |
+| Field non-secret | Xem bảng field bên dưới |
+| Default hợp lý | Model mặc định + prompt mẫu đủ dùng summarize ngày |
+| Migrate + Desk | `bench migrate` → mở **Kairos Settings** trên Desk, sửa/lưu được |
+| Code layout | `kairos/kairos/doctype/kairos_settings/` (`*.json` + `kairos_settings.py`) |
+
+**Field (MVP — chỉ những cái này)**
+
+| Fieldname | Type | Default / ý nghĩa |
+|-----------|------|-------------------|
+| `llm_model` | Data | VD. `gpt-4o-mini` — tên model gửi LLM (không phải key) |
+| `day_report_system_prompt` | Text / Long Text | System prompt cho summarize Day Report |
+| `day_report_user_prompt_template` | Text / Long Text | Template user message; placeholder `{date}`, `{timeline}` |
+| `collection_enabled` | Check | Bật/tắt chấp nhận Event từ collector (default On) |
+| `timezone` | Data (Read Only hoặc Data) | `Asia/Ho_Chi_Minh` — khớp spec; không đổi linh tinh trong MVP |
+
+**Không làm trong A2**
+
+- Không field API key / token / base URL secret trên DocType
+- Không Client Script / custom button Generate (→ Phase C)
+- Không DocType Event / Day Report (→ A3, A4)
+- Không helper `kairos_secret` (→ A5)
+- Không API `upsert_events` (→ A6)
+
+**Done khi**
+
+1. `bench --site <site> migrate` OK  
+2. Desk → tìm **Kairos Settings** → mở được (Single)  
+3. Đổi `llm_model` / prompt → Save → reload vẫn còn  
+4. Không có field secret trên form  
+
+**Cách kiểm tra nhanh**
+
+```bash
+# trong kairos-bench
+bench --site <site> migrate
+bench --site <site> console
+>>> frappe.get_single("Kairos Settings")
+```
+
+Desk: AwesomeBar → `Kairos Settings` → sửa → Save.
+
+---
+
+#### A3 — DocType `Kairos Event` [x]
+
+**Mục tiêu:** Lưu 1 row = 1 canonical event (§ model); unique `event_id`.
+
+| Việc | Chi tiết |
+|------|----------|
+| Fields | Bắt buộc + khuyến nghị + hệ thống theo § Kairos Event |
+| Unique | `event_id` unique; index `activity_date`, `source` nếu cần list |
+| Permissions | System Manager / role Kairos (A7 tinh chỉnh) |
+| Kiểm tra | Tạo tay 1 Event trên Desk |
+
+**Done khi:** Tạo tay 1 Event với `event_id` hợp lệ; trùng `event_id` bị chặn.  
+**Không làm:** API upsert (A6), mapper Codex (B).
+
+---
+
+#### A4 — DocType `Kairos Day Report` [x]
+
+**Mục tiêu:** 1 báo cáo / ngày (timeline + summary text); chỗ gắn nút Copy sau (C).
+
+| Việc | Chi tiết |
+|------|----------|
+| Fields | `report_date` (unique), `timeline_text`, `summary_text`, `status` (draft/ready…), optional link meta |
+| Permissions | Mở/sửa trên Desk |
+| Kiểm tra | Tạo tay 1 report ngày hôm nay |
+| Test Frappe | `bench --site <site> run-tests --app kairos --module kairos.kairos.doctype.kairos_day_report.test_kairos_day_report` |
+
+**Done khi:** Tạo tay 1 `Kairos Day Report`.  
+**Không làm:** Generate LLM / Copy button (C).
+
+---
+
+#### A5 — Helper secrets `kairos_llm_*` [x]
+
+**Mục tiêu:** Đọc key theo thứ tự env → `frappe.conf`; thiếu thì lỗi rõ.
+
+| Việc | Chi tiết |
+|------|----------|
+| Module helper | VD. `kairos/kairos/secrets.py` — `kairos_secret(conf_key, env_key)` |
+| Keys | `kairos_llm_api_key` / `KAIROS_LLM_API_KEY`; `kairos_llm_base_url` / `KAIROS_LLM_BASE_URL` |
+| Fail rõ | Raise / msg rõ khi thiếu key lúc cần summarize |
+| Test Frappe | `bench --site <site> run-tests --app kairos --module kairos.test_secrets` |
+
+**Done khi:** Console/test: có key → trả về; không key → lỗi rõ.  
+**Không làm:** Gọi LLM thật (C2); không đưa key lên Settings.
+
+---
+
+#### A6 — API `upsert_events` [x]
+
+**Mục tiêu:** Whitelist method nhận batch Event; idempotent theo `event_id`.
+
+| Việc | Chi tiết |
+|------|----------|
+| Method | VD. `kairos.api.upsert_events` — nhận `events: list[dict]` |
+| Validate | Field bắt buộc; derive `activity_date` từ TZ Settings/spec |
+| Upsert | Trùng `event_id` → update-in-place, không nhân đôi |
+| Respect Settings | Nếu `collection_enabled = 0` → từ chối rõ |
+| Test Frappe | `bench --site <site> run-tests --app kairos --module kairos.test_api` |
+
+**Done khi:** Postman/curl tạo Event; gọi lại cùng payload → không tăng số row.  
+**Không làm:** Collector CLI (B).
+
+---
+
+#### A7 — Role + token API cho collector [x]
+
+**Mục tiêu:** User/token trên Dev gọi được `upsert_events` mà không cần login Desk.
+
+| Việc | Chi tiết |
+|------|----------|
+| Role | VD. `Kairos Collector` — permission Event (write) + method |
+| Token | API Key / token user; doc ngắn cách set `KAIROS_FRAPPE_*` trên Dev |
+| Test Frappe | `bench --site <site> run-tests --app kairos --module kairos.test_install` |
+
+**Done khi:** Token gọi `upsert_events` thành công từ máy ngoài bench.
+
+**Gate A:** [ ] Chờ xác nhận token gọi `upsert_events` từ máy ngoài Bench.
+
+---
+
+### Phase B — Collector Dev (`codex@1`)
+
+**Mục tiêu phase:** Trên máy Dev, CLI đọc `~/.codex/sessions` → map `codex@1` → POST `upsert_events` định kỳ ~30 phút.
+
+| # | Việc | Chi tiết làm | Done khi | TT |
+|---|------|--------------|----------|----|
+| **B1** | Skeleton CLI | Package `collectors/codex`, entry `kairos-codex`, lệnh `sync` / `--help` | `--help` chạy được | [x] |
+| **B2** | Parser | Quét sessions dir; parse rollout JSONL → session + items | Dry-run in số session/item | [x] |
+| **B3** | Mapper `codex@1` | 1 session → nhiều Event canonical (field-by-field § mapper) | Dry-run in JSON canonical | [x] |
+| **B4** | Client HTTP | POST batch với `KAIROS_FRAPPE_URL` + `KAIROS_FRAPPE_TOKEN` | Sync tay → Event trên Desk | [x] |
+| **B5** | Idempotent E2E | `--verify-idempotency` gửi cùng batch 2 lần; đã xác nhận với token/site thật | Số Event không nhân đôi | [x] |
+| **B6** | Scheduler | Windows Task Scheduler ~30 phút + incremental checkpoint + batch delivery + log file/stdout | Chạy ≥ 1 lần OK | [x] |
+
+**Không làm Phase B:** Day Report, LLM, Copy, multi-collector.
+
+**Gate B:** [x] Event Codex ngày hiện tại lên Desk sau sync.
+
+---
+
+### Phase C — Day Report + Copy
+
+**Mục tiêu phase:** Từ Event theo ngày → Generate summary (LLM + fallback) → Copy to Clipboard paste Teams.
+
+| # | Việc | Chi tiết làm | Done khi | TT |
+|---|------|--------------|----------|----|
+| **C1** | Timeline builder | Query Event theo `activity_date` → text timeline | Preview timeline trên Report / dialog | [x] |
+| **C2** | Generate + LLM | Nút trên Day Report; gọi OpenAI-compatible với model/prompt Settings + secret A5 | Draft `summary_text` trên Desk | [x] |
+| **C3** | Fallback | Không key / LLM lỗi → timeline-only hoặc summary heuristic | Vẫn có báo cáo đọc được | [ ] |
+| **C4** | Copy to Clipboard | Nút Desk copy `summary` (+ timeline nếu cần) | Paste Notepad/Teams được | [ ] |
+| **C5** | (Optional) | Scheduler draft cuối ngày | Có hoặc bỏ; không chặn gate | [ ] |
+
+- 2026-09-13 — C2 triển khai: tạo Summary bằng LLM OpenAI-compatible, dùng model/prompt từ Kairos Settings và secret server-side; nút Generate Summary, API và test thành công/lỗi LLM.
+
+**Không làm Phase C:** PAD/AHK, Teams webhook, SPA.
+
+**Gate C:** [ ] Event → Generate → Copy → paste Teams dùng được.
+
+---
+
+### Phase D — Soft launch
+
+**Mục tiêu phase:** Dùng thật ≥ 3 ngày; chỉnh heuristic; doc vận hành; quyết định backlog.
+
+| # | Việc | Chi tiết làm | Done khi | TT |
+|---|------|--------------|----------|----|
+| **D1** | Dùng thật | Mỗi ngày: sync → Generate → Copy → paste | Checklist ≥ 3 ngày Pass | [ ] |
+| **D2** | Chỉnh emit | Giảm Event rác / parse JSONL lỗi từ log thật | Ít Event nhiễu | [ ] |
+| **D3** | README vận hành | Lệnh bench, env Dev, scheduler, Generate/Copy | Người khác (hoặc bạn sau 1 tuần) chạy lại được | [ ] |
+| **D4** | Go / no-go | Ghi changelog + backlog ưu tiên (Git, Cursor CLI, …) | Quyết định bước tiếp theo | [ ] |
+
+**Gate D:** [ ] Báo cáo hàng ngày ổn, ít sửa tay.
+
+---
+
+**Backlog sau MVP:** Git / Cursor CLI / ChatGPT collectors; service nền; Teams webhook; Compliance API; multi-user; SPA.
 
 ## Changelog
 
@@ -453,3 +643,21 @@ Kairos Apps/
 - 2026-08-07 — Topologi: Codex sessions trên **Developer PC**; bench trên **VPS**; collector local đẩy Event qua API.
 - 2026-08-07 — Collector Dev tuần 1: **CLI/script định kỳ ~30 phút** (không service nền).
 - 2026-08-07 — **Chốt xong công nghệ + kế hoạch MVP** (phase A→D). Spec sẵn sàng implement.
+- 2026-08-10 — A1 hoàn thành (kairos-bench riêng, install, migrate, login Desk) — đánh dấu [x] trong kế hoạch.
+- 2026-08-10 — Làm rõ kế hoạch từng phase; chi tiết A2 (field Settings, phạm vi / không làm, done khi).
+- 2026-08-10 — A2 hoàn thành: DocType Single `Kairos Settings` (model, prompts, collection_enabled, timezone) + migrate `kairos.local`.
+- 2026-08-10 — A3 hoàn thành: DocType `Kairos Event` (canonical fields, unique `event_id`, derive `activity_date` Asia/Ho_Chi_Minh); sample + duplicate blocked.
+- 2026-08-31 — A4 triển khai: DocType `Kairos Day Report` (một report/ngày, timeline, summary, status) + test Frappe.
+- 2026-08-31 — A5 triển khai: helper secrets ưu tiên environment, fallback `site_config`, và báo lỗi rõ khi thiếu cấu hình.
+- 2026-08-31 — A6 triển khai: API batch `upsert_events`, validation, collection switch, và upsert idempotent theo `event_id`.
+- 2026-08-31 — A7 triển khai: role `Kairos Collector`, quyền Event tối thiểu, hook cài/migrate và hướng dẫn tạo API token.
+- 2026-09-01 — B1 triển khai: package CLI `kairos-codex`, command `sync`, dry-run, logging và test standard library.
+- 2026-09-01 — B2 triển khai: parser rollout JSONL, chịu lỗi từng dòng, session/item models và thống kê dry-run.
+- 2026-09-01 — B3 triển khai: mapper `codex@1` cho user request và task completion, canonical JSON dry-run, ID ổn định và test.
+- 2026-09-01 — B4 triển khai: HTTP client stdlib, environment config, token auth, timeout/error handling và test request payload.
+- 2026-09-03 — B5 triển khai và E2E pass: CLI verify idempotency gửi batch hai lần; lần hai không tạo Event mới.
+- 2026-09-04 — B6 triển khai: WSL runner có log theo ngày, PowerShell launcher cho Windows Task Scheduler và hướng dẫn cấu hình lịch 30 phút.
+- 2026-09-05 — B6 tăng cường: checkpoint local chỉ parse session mới/đổi, gửi batch tối đa 100 event và timeout runner cấu hình được.
+- 2026-09-12 — Collector fix: bỏ qua Codex system-context chỉ gồm markup để Frappe không làm rỗng title bắt buộc.
+- 2026-09-12 — B6 E2E pass: initial sync 2,778 event qua 28 batch, checkpoint 25 session và lần tiếp theo bỏ qua session không đổi.
+- 2026-09-12 — C1 E2E pass: tạo Kairos Day Report từ Event theo ngày, preview 24 event trên Desk/API và test Frappe pass.

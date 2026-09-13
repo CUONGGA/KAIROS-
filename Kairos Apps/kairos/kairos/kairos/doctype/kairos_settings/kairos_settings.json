@@ -1,0 +1,88 @@
+{
+ "actions": [],
+ "creation": "2026-08-10 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "llm_section",
+  "llm_model",
+  "collection_enabled",
+  "timezone",
+  "prompt_section",
+  "day_report_system_prompt",
+  "day_report_user_prompt_template"
+ ],
+ "fields": [
+  {
+   "fieldname": "llm_section",
+   "fieldtype": "Section Break",
+   "label": "LLM & Collection"
+  },
+  {
+   "default": "gpt-4o-mini",
+   "description": "T\u00ean model OpenAI-compatible. API key kh\u00f4ng l\u01b0u \u1edf \u0111\u00e2y (site_config / env).",
+   "fieldname": "llm_model",
+   "fieldtype": "Data",
+   "label": "LLM Model",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "description": "T\u1eaft \u0111\u1ec3 t\u1eeb ch\u1ed1i Event t\u1eeb collector (A6).",
+   "fieldname": "collection_enabled",
+   "fieldtype": "Check",
+   "label": "Collection Enabled"
+  },
+  {
+   "default": "Asia/Ho_Chi_Minh",
+   "description": "MVP c\u1ed1 \u0111\u1ecbnh; d\u00f9ng cho activity_date.",
+   "fieldname": "timezone",
+   "fieldtype": "Data",
+   "label": "Timezone",
+   "read_only": 1
+  },
+  {
+   "fieldname": "prompt_section",
+   "fieldtype": "Section Break",
+   "label": "Day Report Prompts"
+  },
+  {
+   "default": "You are Kairos, a personal AI work assistant. Summarize the user's daily activity timeline into a clear Vietnamese day report suitable for pasting into Teams. Be concise, factual, and group related work. Do not invent events that are not in the timeline. Prefer bullet points and short sections (Done / In progress / Notes) when helpful.",
+   "fieldname": "day_report_system_prompt",
+   "fieldtype": "Long Text",
+   "label": "Day Report System Prompt"
+  },
+  {
+   "default": "Date: {date}\nTimezone: Asia/Ho_Chi_Minh\n\nActivity timeline:\n{timeline}\n\nWrite a day report in Vietnamese based only on the timeline above.",
+   "description": "Placeholders: {date}, {timeline}",
+   "fieldname": "day_report_user_prompt_template",
+   "fieldtype": "Long Text",
+   "label": "Day Report User Prompt Template"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-08-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Kairos",
+ "name": "Kairos Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

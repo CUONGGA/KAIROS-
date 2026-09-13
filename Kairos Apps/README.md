@@ -8,8 +8,8 @@ Spec đầy đủ: [KAIROS.md](./KAIROS.md).
 
 | Path | Vai trò | Chạy ở đâu | Trạng thái |
 |------|---------|------------|------------|
-| [`kairos/`](./kairos/) | Frappe custom app: DocTypes, API nhận Event, Day Report, Copy to Clipboard | **VPS** (bench) | Chưa scaffold (Phase A) |
-| [`collectors/codex/`](./collectors/codex/) | CLI collector `codex@1`: đọc `~/.codex/sessions` → map Event → POST Frappe | **Máy Developer** | Chưa scaffold (Phase B) |
+| [`kairos/`](./kairos/) | Frappe custom app: DocTypes, API nhận Event, Day Report, Copy to Clipboard | **kairos-bench** (local) / VPS | **A1–A7 xong** — Event API + collector auth sẵn sàng; tiếp Phase B |
+| [`collectors/codex/`](./collectors/codex/) | CLI collector `codex@1`: đọc `~/.codex/sessions` → map Event → POST Frappe | **Máy Developer** | **B1–B4 xong** — CLI + parser + mapper + HTTP; tiếp B5 E2E |
 
 Hiện workspace mới có spec; code app sẽ thêm theo phase A→D trong [KAIROS.md](./KAIROS.md).
 
@@ -52,10 +52,14 @@ Hiện workspace mới có spec; code app sẽ thêm theo phase A→D trong [KAI
 
 ## Roadmap MVP
 
-1. **A** — Scaffold `kairos` + API `upsert_events`
-2. **B** — CLI `collectors/codex` + Task Scheduler
-3. **C** — Generate Day Report + Copy to Clipboard
-4. **D** — Soft launch 3–5 ngày
+Chi tiết + tick: [KAIROS.md § Kế hoạch](./KAIROS.md#kế-hoạch-triển-khai-mvp).
+
+| Phase | TT | Tóm tắt |
+|-------|----|---------|
+| **A** Frappe | A1–A7 [x] | Settings → Event → Day Report → secrets → upsert API → token |
+| **B** Collector | [ ] | CLI Codex → POST Frappe |
+| **C** Day Report | [ ] | Generate + Copy to Clipboard |
+| **D** Soft launch | [ ] | 3–5 ngày thật |
 
 Backlog: collectors Git / Cursor CLI / ChatGPT, service nền, Teams webhook.
 
