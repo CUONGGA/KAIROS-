@@ -15,7 +15,7 @@ LLM_TIMEOUT_SECONDS = 30
 
 
 def generate_day_report_summary(report_date):
-	"""Refresh a day's timeline, then save an LLM-generated summary to its Day Report."""
+	"""Refresh a timeline and save an LLM summary or a safe local fallback."""
 	report, _timeline = generate_day_report_timeline(report_date)
 	settings = frappe.get_single("Kairos Settings")
 	messages = _build_messages(settings, report)
@@ -27,15 +27,30 @@ def generate_day_report_summary(report_date):
 			model=(settings.llm_model or "").strip(),
 			messages=messages,
 		)
-	except Exception:
-		report.status = "error"
-		report.save(ignore_permissions=True)
-		raise
+	except frappe.ValidationError:
+		frappe.log_error(frappe.get_traceback(), "Kairos Day Report LLM fallback")
+		summary = build_fallback_summary(report)
 
 	report.summary_text = summary
 	report.status = "ready"
 	report.save(ignore_permissions=True)
 	return report
+
+
+def build_fallback_summary(report) -> str:
+	"""Build a readable report locally without exposing an LLM error to the reader."""
+	timeline_entries = [line for line in (report.timeline_text or "").splitlines()[1:] if line.strip()]
+	entries = "\n".join(f"- {entry}" for entry in timeline_entries)
+	if not entries:
+		entries = "- Không có hoạt động nào được ghi nhận trong ngày này."
+
+	return (
+		f"## Báo cáo ngày {report.report_date}\n\n"
+		"### Hoạt động đã ghi nhận\n"
+		f"{entries}\n\n"
+		"### Ghi chú\n"
+		"- Bản tóm tắt dự phòng được tạo từ timeline vì dịch vụ AI hiện không khả dụng."
+	)
 
 
 def call_openai_chat_completions(*, base_url: str, api_key: str, model: str, messages: list[dict]) -> str:
@@ -63,6 +78,8 @@ def call_openai_chat_completions(*, base_url: str, api_key: str, model: str, mes
 		frappe.throw(f"LLM returned HTTP {error.code}: {body}", title="Kairos LLM")
 	except URLError as error:
 		frappe.throw(f"Unable to reach LLM: {error.reason}", title="Kairos LLM")
+	except TimeoutError:
+		frappe.throw("LLM request timed out.", title="Kairos LLM")
 
 	try:
 		content = json.loads(body)["choices"][0]["message"]["content"]

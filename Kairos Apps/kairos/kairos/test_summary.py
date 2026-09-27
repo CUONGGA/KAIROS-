@@ -80,12 +80,24 @@ class TestDayReportSummary(FrappeTestCase):
 		)
 		self.assertIn("Timeline 2099-12-31", mock_completion.call_args.kwargs["messages"][1]["content"])
 
+	@patch("kairos.summary.frappe.log_error")
 	@patch("kairos.summary.call_openai_chat_completions", side_effect=frappe.ValidationError("LLM failed"))
-	def test_marks_report_error_when_llm_fails(self, _mock_completion):
-		with self.assertRaises(frappe.ValidationError):
-			generate_day_report_summary(self.report_date)
+	def test_generates_a_ready_fallback_when_llm_fails(self, _mock_completion, mock_log_error):
+		report = generate_day_report_summary(self.report_date)
 
-		self.assertEqual(frappe.get_doc("Kairos Day Report", self.report_date).status, "error")
+		self.assertEqual(report.status, "ready")
+		self.assertIn("Bản tóm tắt dự phòng", report.summary_text)
+		self.assertIn("Implement summary generation", report.summary_text)
+		mock_log_error.assert_called_once()
+
+	@patch("kairos.summary.frappe.log_error")
+	@patch("kairos.summary.get_llm_api_key", side_effect=frappe.ValidationError("Missing key"))
+	def test_generates_a_fallback_when_llm_key_is_missing(self, _mock_api_key, mock_log_error):
+		report = generate_day_report_summary(self.report_date)
+
+		self.assertEqual(report.status, "ready")
+		self.assertIn("dịch vụ AI hiện không khả dụng", report.summary_text)
+		mock_log_error.assert_called_once()
 
 	def test_end_to_end_with_a_local_openai_compatible_server(self):
 		base_url = f"http://127.0.0.1:{self.llm_server.server_port}/v1"

@@ -607,11 +607,12 @@ Desk: AwesomeBar → `Kairos Settings` → sửa → Save.
 |---|------|--------------|----------|----|
 | **C1** | Timeline builder | Query Event theo `activity_date` → text timeline | Preview timeline trên Report / dialog | [x] |
 | **C2** | Generate + LLM | Nút trên Day Report; gọi OpenAI-compatible với model/prompt Settings + secret A5 | Draft `summary_text` trên Desk | [x] |
-| **C3** | Fallback | Không key / LLM lỗi → timeline-only hoặc summary heuristic | Vẫn có báo cáo đọc được | [ ] |
+| **C3** | Fallback | Không key / LLM lỗi → timeline-only hoặc summary heuristic | Vẫn có báo cáo đọc được | [x] |
 | **C4** | Copy to Clipboard | Nút Desk copy `summary` (+ timeline nếu cần) | Paste Notepad/Teams được | [ ] |
 | **C5** | (Optional) | Scheduler draft cuối ngày | Có hoặc bỏ; không chặn gate | [ ] |
 
 - 2026-09-13 — C2 triển khai: tạo Summary bằng LLM OpenAI-compatible, dùng model/prompt từ Kairos Settings và secret server-side; nút Generate Summary, API và test thành công/lỗi LLM.
+- 2026-09-27 — C3 triển khai: khi thiếu key, timeout hoặc LLM lỗi, tạo summary fallback từ timeline, giữ Day Report ở trạng thái ready và log lỗi server-side.
 
 **Không làm Phase C:** PAD/AHK, Teams webhook, SPA.
 

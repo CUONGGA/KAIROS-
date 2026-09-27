@@ -50,6 +50,15 @@ bench --site kairos.local migrate
 bench start
 ```
 
+After cloning on a developer machine, create its local configuration files once:
+
+```bash
+bash scripts/setup_local_env.sh
+```
+
+The command creates `~/.config/kairos/collector.env` and `~/.config/kairos/llm.env` only when
+they do not already exist. Obtain their secret values from the team's approved secret vault.
+
 Open Desk, configure **Kairos Settings**, then open **Kairos Day Report** and use **Generate
 Timeline** followed by **Generate Summary**.
 
@@ -73,6 +82,8 @@ PYTHONPATH="collectors/codex/src" python3 -m kairos_codex sync --dry-run
 
 See [the Codex collector guide](collectors/codex/README.md) and
 [the scheduler runbook](docs/B6-SCHEDULED-COLLECTOR.md) for production scheduling.
+
+For local credentials and the Bench launcher, see [local environment configuration](docs/LOCAL-ENVIRONMENT.md).
 
 ## Documentation and security
 
