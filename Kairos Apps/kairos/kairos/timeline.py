@@ -48,9 +48,11 @@ def generate_day_report_timeline(report_date: str | date):
 
 	if frappe.db.exists("Kairos Day Report", report_name):
 		report = frappe.get_doc("Kairos Day Report", report_name)
+		timeline_changed = report.timeline_text != timeline.text
 		report.timeline_text = timeline.text
-		report.status = "draft"
-		report.save()
+		if timeline_changed:
+			report.status = "draft"
+			report.save()
 	else:
 		report = frappe.get_doc(
 			{

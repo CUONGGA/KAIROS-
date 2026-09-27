@@ -11,3 +11,10 @@ app_license = "mit"
 
 after_install = "kairos.install.after_install"
 after_migrate = "kairos.install.after_migrate"
+
+# Bench server time must be Asia/Ho_Chi_Minh; the job itself derives report_date in that timezone.
+scheduler_events = {
+	"cron": {
+		"30 18 * * *": ["kairos.scheduler.generate_daily_draft"],
+	},
+}

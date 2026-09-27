@@ -36,7 +36,10 @@ Cursor, or ChatGPT collectors later does not require a new reporting schema.
 - OpenAI-compatible daily summaries using prompts and model settings from Frappe Desk.
 - Server-side secrets: API keys never belong in DocTypes, source code, or Git.
 
-Copy-to-clipboard and fallback summaries when the LLM is unavailable are planned next.
+Copy a completed summary, with or without its timeline, directly from Frappe Desk.
+
+Frappe Scheduler also refreshes a Timeline draft at 18:30 (server time); see
+[the daily report scheduler guide](docs/C5-DAILY-REPORT-SCHEDULER.md).
 
 ## Quick start
 

@@ -609,14 +609,35 @@ Desk: AwesomeBar → `Kairos Settings` → sửa → Save.
 | **C2** | Generate + LLM | Nút trên Day Report; gọi OpenAI-compatible với model/prompt Settings + secret A5 | Draft `summary_text` trên Desk | [x] |
 | **C3** | Fallback | Không key / LLM lỗi → timeline-only hoặc summary heuristic | Vẫn có báo cáo đọc được | [x] |
 | **C4** | Copy to Clipboard | Nút Desk copy `summary` (+ timeline nếu cần) | Paste Notepad/Teams được | [ ] |
-| **C5** | (Optional) | Scheduler draft cuối ngày | Có hoặc bỏ; không chặn gate | [ ] |
+| **C5** | (Optional) | Scheduler draft cuối ngày | Có hoặc bỏ; không chặn gate | [x] |
 
 - 2026-09-13 — C2 triển khai: tạo Summary bằng LLM OpenAI-compatible, dùng model/prompt từ Kairos Settings và secret server-side; nút Generate Summary, API và test thành công/lỗi LLM.
 - 2026-09-27 — C3 triển khai: khi thiếu key, timeout hoặc LLM lỗi, tạo summary fallback từ timeline, giữ Day Report ở trạng thái ready và log lỗi server-side.
+- 2026-09-27 — C4 triển khai: menu Copy trên Day Report hỗ trợ Summary hoặc Summary + Timeline, có Clipboard API và fallback cho Desk local HTTP; chờ xác minh paste thủ công trên Desk.
+- 2026-09-27 — C5 triển khai: Frappe Scheduler tạo/làm mới Timeline draft lúc 18:30, không tự gọi LLM; report ready chỉ trở lại draft khi Timeline thay đổi.
 
 **Không làm Phase C:** PAD/AHK, Teams webhook, SPA.
 
 **Gate C:** [ ] Event → Generate → Copy → paste Teams dùng được.
+
+---
+
+### Phase C.5 — Trusted LLM Summary Context
+
+**Mục tiêu:** Nâng summary từ việc diễn đạt lại Timeline thành báo cáo grounded, có bằng chứng, có
+kiểm soát privacy/cost và mở rộng được cho collector mới. Thiết kế, work package và gate chi tiết:
+[`docs/RICH-LLM-SUMMARY-PLAN.md`](./docs/RICH-LLM-SUMMARY-PLAN.md).
+
+| # | Việc | Done khi | TT |
+|---|------|----------|----|
+| **C.5.1** | Event quality gate + redaction | Context không chứa raw/secret/path tuyệt đối | [ ] |
+| **C.5.2** | Deterministic Context Builder @1 | Context hash, budget và reduction policy có test | [ ] |
+| **C.5.3** | Structured output + evidence validation | Claim summary tham chiếu Event ref hợp lệ | [ ] |
+| **C.5.4** | Provenance, cache, async reliability | Có model/prompt/context metadata và fallback | [ ] |
+| **C.5.5** | Evaluation + collector conformance | Golden suite và collector thứ hai pass | [ ] |
+
+**Gate C.5:** ≥95% claim có evidence, không leak secret/raw, fallback không mất report, và summary
+cần sửa tay đáng kể ở ≤20% ngày pilot. Chưa triển khai RAG trong phase này.
 
 ---
 
