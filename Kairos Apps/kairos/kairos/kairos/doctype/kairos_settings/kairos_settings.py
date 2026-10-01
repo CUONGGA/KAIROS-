@@ -27,6 +27,10 @@ class KairosSettings(Document):
 			)
 		if not (self.llm_model or "").strip():
 			frappe.throw("llm_model không được trống.", title="Kairos Settings")
+		if not 1 <= int(self.summary_context_max_events or 0) <= 500:
+			frappe.throw("summary_context_max_events phải trong khoảng 1 đến 500.", title="Kairos Settings")
+		if not 500 <= int(self.summary_context_max_chars or 0) <= 200_000:
+			frappe.throw("summary_context_max_chars phải trong khoảng 500 đến 200000.", title="Kairos Settings")
 
 
 def ensure_defaults():
@@ -38,6 +42,8 @@ def ensure_defaults():
 		"llm_model": "gpt-4o-mini",
 		"collection_enabled": 1,
 		"timezone": "Asia/Ho_Chi_Minh",
+		"summary_context_max_events": 150,
+		"summary_context_max_chars": 50_000,
 		"day_report_system_prompt": DEFAULT_SYSTEM_PROMPT,
 		"day_report_user_prompt_template": DEFAULT_USER_PROMPT_TEMPLATE,
 	}

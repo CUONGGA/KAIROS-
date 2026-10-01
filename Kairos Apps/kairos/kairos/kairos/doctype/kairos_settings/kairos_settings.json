@@ -8,6 +8,9 @@
   "llm_model",
   "collection_enabled",
   "timezone",
+  "context_section",
+  "summary_context_max_events",
+  "summary_context_max_chars",
   "prompt_section",
   "day_report_system_prompt",
   "day_report_user_prompt_template"
@@ -40,6 +43,27 @@
    "fieldtype": "Data",
    "label": "Timezone",
    "read_only": 1
+  },
+  {
+   "fieldname": "context_section",
+   "fieldtype": "Section Break",
+   "label": "Summary Context Policy"
+  },
+  {
+   "default": "150",
+   "description": "Số Event tối đa sau lọc trùng trước khi gửi LLM.",
+   "fieldname": "summary_context_max_events",
+   "fieldtype": "Int",
+   "label": "Summary Context Max Events",
+   "reqd": 1
+  },
+  {
+   "default": "50000",
+   "description": "Giới hạn ký tự JSON context đã sanitize, độc lập với provider.",
+   "fieldname": "summary_context_max_chars",
+   "fieldtype": "Int",
+   "label": "Summary Context Max Characters",
+   "reqd": 1
   },
   {
    "fieldname": "prompt_section",

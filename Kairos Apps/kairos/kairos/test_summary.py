@@ -9,7 +9,7 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from kairos.summary import call_openai_chat_completions, generate_day_report_summary
+from kairos.summary import build_llm_safe_timeline, call_openai_chat_completions, generate_day_report_summary
 
 
 class _FakeOpenAIHandler(BaseHTTPRequestHandler):
@@ -78,7 +78,10 @@ class TestDayReportSummary(FrappeTestCase):
 			mock_completion.call_args.kwargs["model"],
 			frappe.get_single("Kairos Settings").llm_model,
 		)
-		self.assertIn("Timeline 2099-12-31", mock_completion.call_args.kwargs["messages"][1]["content"])
+		self.assertIn("Implement summary generation", mock_completion.call_args.kwargs["messages"][1]["content"])
+		message = mock_completion.call_args.kwargs["messages"][1]["content"]
+		self.assertIn('"schema_version":"kairos.summary_context@1"', message)
+		self.assertNotIn("raw_payload", message)
 
 	@patch("kairos.summary.frappe.log_error")
 	@patch("kairos.summary.call_openai_chat_completions", side_effect=frappe.ValidationError("LLM failed"))
@@ -111,7 +114,31 @@ class TestDayReportSummary(FrappeTestCase):
 		self.assertEqual(report.summary_text, "- E2E summary from local LLM.")
 		request = json.loads(self.llm_server.request_body)
 		self.assertEqual(request["model"], frappe.get_single("Kairos Settings").llm_model)
-		self.assertIn("Timeline 2099-12-31", request["messages"][1]["content"])
+		self.assertIn("Implement summary generation", request["messages"][1]["content"])
+		self.assertIn('"schema_version":"kairos.summary_context@1"', request["messages"][1]["content"])
+
+	def test_llm_safe_timeline_excludes_raw_payload_and_redacts_event_content(self):
+		frappe.get_doc(
+			{
+				"doctype": "Kairos Event",
+				"source": "codex",
+				"external_id": "summary-secret-2099",
+				"event_id": "codex:summary-secret-2099",
+				"occurred_at": "2099-12-31T03:00:00Z",
+				"title": "Deploy password=super-secret-token from /home/kairos/private/deploy.py",
+				"kind": "message",
+				"status": "ok",
+				"raw_payload": '{"secret": "raw-payload-secret"}',
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(frappe.db.delete, "Kairos Event", {"external_id": "summary-secret-2099"})
+
+		safe_timeline = build_llm_safe_timeline(self.report_date)
+
+		self.assertIn("password=[REDACTED]", safe_timeline)
+		self.assertIn("…/deploy.py", safe_timeline)
+		self.assertNotIn("super-secret-token", safe_timeline)
+		self.assertNotIn("raw-payload-secret", safe_timeline)
 
 	@patch("kairos.summary.urlopen")
 	def test_sends_an_openai_compatible_request(self, mock_urlopen):

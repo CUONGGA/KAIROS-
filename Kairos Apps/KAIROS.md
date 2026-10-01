@@ -630,8 +630,8 @@ kiểm soát privacy/cost và mở rộng được cho collector mới. Thiết 
 
 | # | Việc | Done khi | TT |
 |---|------|----------|----|
-| **C.5.1** | Event quality gate + redaction | Context không chứa raw/secret/path tuyệt đối | [ ] |
-| **C.5.2** | Deterministic Context Builder @1 | Context hash, budget và reduction policy có test | [ ] |
+| **C.5.1** | Event quality gate + redaction | Context không chứa raw/secret/path tuyệt đối | [x] |
+| **C.5.2** | Deterministic Context Builder @1 | Context hash, budget và reduction policy có test | [x] |
 | **C.5.3** | Structured output + evidence validation | Claim summary tham chiếu Event ref hợp lệ | [ ] |
 | **C.5.4** | Provenance, cache, async reliability | Có model/prompt/context metadata và fallback | [ ] |
 | **C.5.5** | Evaluation + collector conformance | Golden suite và collector thứ hai pass | [ ] |
