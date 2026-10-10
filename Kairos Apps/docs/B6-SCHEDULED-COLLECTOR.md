@@ -9,7 +9,7 @@ Create `~/.config/kairos/collector.env` in WSL. The session directory is
 required because Codex stores this user's sessions on the Windows drive.
 
 ```bash
-KAIROS_FRAPPE_URL="http://127.0.0.1:8001"
+KAIROS_FRAPPE_URL="http://127.0.0.1:8002"
 KAIROS_FRAPPE_TOKEN="<api_key>:<api_secret>"
 KAIROS_CODEX_SESSIONS_DIR="/mnt/c/Users/cuong.nguyen.e/.codex/sessions"
 KAIROS_CODEX_BATCH_SIZE=100

@@ -78,7 +78,7 @@ bench --site kairos.local set-config kairos_llm_base_url "https://provider.examp
 The collector runs on the developer machine and reads configuration from local environment values:
 
 ```bash
-export KAIROS_FRAPPE_URL="http://127.0.0.1:8001"
+export KAIROS_FRAPPE_URL="http://127.0.0.1:8002"
 export KAIROS_FRAPPE_TOKEN="<frappe-api-token>"
 PYTHONPATH="collectors/codex/src" python3 -m kairos_codex sync --dry-run
 ```
@@ -87,6 +87,9 @@ See [the Codex collector guide](collectors/codex/README.md) and
 [the scheduler runbook](docs/B6-SCHEDULED-COLLECTOR.md) for production scheduling.
 
 For local credentials and the Bench launcher, see [local environment configuration](docs/LOCAL-ENVIRONMENT.md).
+
+For the actual production-readiness status, target architecture, security/backup considerations,
+and go-live gates, see [Production Deployment and Readiness](docs/PRODUCTION-DEPLOYMENT.md).
 
 ## Documentation and security
 

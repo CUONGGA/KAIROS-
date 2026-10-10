@@ -101,7 +101,7 @@ bench --site kairos.local clear-cache
 
 ## 3. Kiểm tra A1 (checklist)
 
-- [x] `bench init` + `new-site` xong, login Desk được *(kairos-bench, port 8001)*
+- [x] `bench init` + `new-site` xong, login Desk được *(kairos-bench, port 8002)*
 - [x] Gắn app `kairos/` (symlink / install-app)
 - [x] `install-app kairos` + `migrate` không lỗi
 - [x] App **Kairos** / login Desk OK
