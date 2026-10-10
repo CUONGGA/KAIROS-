@@ -5,7 +5,7 @@ set -euo pipefail
 
 readonly BENCH_DIR="${KAIROS_BENCH_DIR:-$HOME/kairos-bench}"
 readonly CONFIG_FILE="${KAIROS_LLM_ENV_FILE:-$HOME/.config/kairos/llm.env}"
-readonly BENCH_BIN="$BENCH_DIR/env/bin/bench"
+readonly BENCH_BIN="${KAIROS_BENCH_BIN:-$(command -v bench || true)}"
 
 if [[ ! -d "$BENCH_DIR" ]]; then
 	echo "Kairos Bench directory was not found. Set KAIROS_BENCH_DIR." >&2
@@ -25,8 +25,8 @@ if [[ -z "${KAIROS_LLM_API_KEY:-}" ]]; then
 	exit 1
 fi
 
-if [[ ! -x "$BENCH_BIN" ]]; then
-	echo "Kairos Bench executable was not found: $BENCH_BIN" >&2
+if [[ -z "$BENCH_BIN" || ! -x "$BENCH_BIN" ]]; then
+	echo "Bench CLI was not found. Set KAIROS_BENCH_BIN to its executable path." >&2
 	exit 1
 fi
 
