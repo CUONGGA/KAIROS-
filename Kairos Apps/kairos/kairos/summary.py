@@ -3,27 +3,58 @@
 from __future__ import annotations
 
 import json
-from datetime import timezone
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import frappe
-from frappe.utils import get_datetime
+from frappe.utils import get_datetime, getdate
 
+from kairos.generation import (
+	GenerationFingerprint,
+	build_generation_fingerprint,
+	classify_generation_error,
+	is_summary_cache_hit,
+)
 from kairos.llm_context import build_day_context
 from kairos.quality import sanitize_event_for_llm
 from kairos.secrets import get_llm_api_key, get_llm_base_url
 from kairos.timeline import KAIROS_TZ, generate_day_report_timeline
 
 LLM_TIMEOUT_SECONDS = 30
+GENERATION_LOCK_TIMEOUT_SECONDS = 90
+GENERATION_LOCK_WAIT_SECONDS = 40
 
 
-def generate_day_report_summary(report_date):
-	"""Refresh a timeline and save an LLM summary or a safe local fallback."""
+@dataclass(frozen=True)
+class SummaryGenerationResult:
+	"""Day Report plus whether its existing successful summary was reused."""
+
+	report: object
+	cache_hit: bool
+
+
+def generate_day_report_summary(report_date, *, force: bool = False) -> SummaryGenerationResult:
+	"""Generate once per stable input, or reuse a matching successful summary."""
+	normalized_date = getdate(report_date)
+	lock_name = f"{frappe.conf.db_name}:kairos:summary-generation:{normalized_date.isoformat()}"
+	with frappe.cache.lock(
+		lock_name,
+		timeout=GENERATION_LOCK_TIMEOUT_SECONDS,
+		blocking_timeout=GENERATION_LOCK_WAIT_SECONDS,
+	):
+		return _generate_day_report_summary(normalized_date, force=force)
+
+
+def _generate_day_report_summary(report_date, *, force: bool) -> SummaryGenerationResult:
 	report, _timeline = generate_day_report_timeline(report_date)
 	settings = frappe.get_single("Kairos Settings")
 	context = build_day_context(report.report_date)
-	safe_timeline = build_llm_safe_timeline(report.report_date)
+	fingerprint = build_generation_fingerprint(report.report_date, context, settings)
+	if is_summary_cache_hit(report, fingerprint, force=force):
+		return SummaryGenerationResult(report=report, cache_hit=True)
+
 	messages = _build_messages(settings, report, context.to_json())
 
 	try:
@@ -33,14 +64,67 @@ def generate_day_report_summary(report_date):
 			model=(settings.llm_model or "").strip(),
 			messages=messages,
 		)
-	except frappe.ValidationError:
+	except frappe.ValidationError as error:
 		frappe.log_error(frappe.get_traceback(), "Kairos Day Report LLM fallback")
+		safe_timeline = build_llm_safe_timeline(report.report_date)
 		summary = build_fallback_summary(report, safe_timeline)
+		_apply_generation_metadata(
+			report,
+			context,
+			fingerprint,
+			mode="fallback",
+			error_code=classify_generation_error(error),
+			cacheable=False,
+		)
+	else:
+		latest_settings = frappe.get_single("Kairos Settings")
+		latest_context = build_day_context(report.report_date)
+		latest_fingerprint = build_generation_fingerprint(report.report_date, latest_context, latest_settings)
+		if latest_fingerprint.generation_key != fingerprint.generation_key:
+			report.status = "draft"
+			report.save(ignore_permissions=True)
+			frappe.throw(
+				"Day Report inputs changed while the LLM was generating. Generate the summary again.",
+				title="Kairos Day Report",
+			)
+		_apply_generation_metadata(
+			report,
+			context,
+			fingerprint,
+			mode="llm",
+			error_code=None,
+			cacheable=True,
+		)
 
 	report.summary_text = summary
 	report.status = "ready"
+	report.flags.kairos_generation_save = True
 	report.save(ignore_permissions=True)
-	return report
+	report.flags.kairos_generation_save = False
+	return SummaryGenerationResult(report=report, cache_hit=False)
+
+
+def _apply_generation_metadata(
+	report,
+	context,
+	fingerprint: GenerationFingerprint,
+	*,
+	mode: str,
+	error_code: str | None,
+	cacheable: bool,
+) -> None:
+	"""Persist non-secret provenance; fallback results deliberately have no cache key."""
+	report.generation_mode = mode
+	report.generated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+	report.llm_model = fingerprint.model
+	report.prompt_version = fingerprint.prompt_version
+	report.prompt_hash = fingerprint.prompt_hash
+	report.context_version = fingerprint.context_version
+	report.context_hash = fingerprint.context_hash
+	report.generation_key = fingerprint.generation_key if cacheable else None
+	report.context_event_count = context.selected_count
+	report.context_excluded_count = context.excluded_count
+	report.generation_error_code = error_code
 
 
 def build_fallback_summary(report, safe_timeline: str | None = None) -> str:

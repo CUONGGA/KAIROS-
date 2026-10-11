@@ -3,10 +3,13 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from kairos.api import upsert_events
+from kairos.api import generate_day_summary, upsert_events
 
 
 class TestUpsertEvents(FrappeTestCase):
@@ -53,3 +56,22 @@ class TestUpsertEvents(FrappeTestCase):
 			upsert_events(events=[self.event_payload()])
 
 		self.assertFalse(frappe.db.exists("Kairos Event", self.event_id))
+
+
+class TestDaySummaryAPI(FrappeTestCase):
+	@patch("kairos.api.generate_day_report_summary")
+	def test_returns_cache_metadata_and_parses_force_flag(self, mock_generate):
+		report = SimpleNamespace(
+			name="2026-10-10",
+			report_date="2026-10-10",
+			status="ready",
+			summary_text="Done",
+			generation_mode="llm",
+		)
+		mock_generate.return_value = SimpleNamespace(report=report, cache_hit=False)
+
+		response = generate_day_summary("2026-10-10", force="true")
+
+		mock_generate.assert_called_once_with("2026-10-10", force=True)
+		self.assertFalse(response["cache_hit"])
+		self.assertEqual(response["generation_mode"], "llm")

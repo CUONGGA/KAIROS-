@@ -173,6 +173,12 @@ Yêu cầu vận hành:
 - Khi tổng hợp vượt ngưỡng sync UI, dùng Frappe background job; Day Report có trạng thái `generating`
   và Desk poll/refresh. Job phải idempotent theo generation key.
 
+Trạng thái 2026-10-11: cache/idempotency đồng bộ đã triển khai. `generation_key` băm canonical từ
+`report_date + context_hash + context_version + model + prompt_version + prompt_hash`; Redis lock theo
+ngày ngăn hai request gọi model đồng thời. Cache chỉ nhận `generation_mode=llm`; fallback không có
+generation key để lần sau có thể thử provider lại. Background job, retry transient và metrics vẫn
+thuộc phần việc tiếp theo.
+
 ## 9. Provenance và schema Day Report
 
 Trước khi triển khai, mở rộng `Kairos Day Report` bằng các field non-secret sau:
@@ -191,6 +197,11 @@ Trước khi triển khai, mở rộng `Kairos Day Report` bằng các field non
 
 Không lưu full provider response. Context snapshot sanitized chỉ được thêm sau khi có retention policy,
 permission System Manager và nhu cầu debug thực tế; mặc định chỉ lưu hash + manifest count.
+
+Các field trên đã được thêm vào `Kairos Day Report`; triển khai còn thêm `prompt_hash` và
+`generation_key` để prompt sửa trực tiếp cũng làm cache miss. Desk có hai action: Generate Summary dùng
+cache và Force Regenerate chủ động gọi provider lại. Chỉnh tay `summary_text` chuyển
+`generation_mode=manual` và xóa generation key.
 
 ## 10. Evaluation trước khi rollout
 

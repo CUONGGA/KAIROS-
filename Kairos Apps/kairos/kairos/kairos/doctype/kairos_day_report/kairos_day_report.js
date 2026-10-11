@@ -19,29 +19,50 @@ frappe.ui.form.on("Kairos Day Report", {
 			});
 		});
 
-		frm.add_custom_button(__("Generate Summary"), () => {
-			if (!frm.doc.report_date) {
-				frappe.msgprint(__("Set Report Date before generating a summary."));
-				return;
-			}
-
-			frappe.call({
-				method: "kairos.api.generate_day_summary",
-				args: { report_date: frm.doc.report_date },
-				freeze: true,
-				freeze_message: __("Generating AI summary..."),
-				callback: (response) => {
-					if (!response.exc) {
-						frappe.set_route("Form", "Kairos Day Report", response.message.report_name);
-					}
-				},
-			});
+		frm.add_custom_button(__("Generate Summary"), () => generate_summary(frm, false));
+		frm.add_custom_button(__("Force Regenerate"), () => {
+			frappe.confirm(
+				__("Call the LLM again even when the current summary inputs have not changed?"),
+				() => generate_summary(frm, true),
+			);
 		});
 
 		frm.add_custom_button(__("Summary"), () => copy_report(frm, false), __("Copy"));
 		frm.add_custom_button(__("Summary + Timeline"), () => copy_report(frm, true), __("Copy"));
 	},
 });
+
+
+function generate_summary(frm, force) {
+	if (!frm.doc.report_date) {
+		frappe.msgprint(__("Set Report Date before generating a summary."));
+		return;
+	}
+
+	frappe.call({
+		method: "kairos.api.generate_day_summary",
+		args: { report_date: frm.doc.report_date, force },
+		freeze: true,
+		freeze_message: force ? __("Regenerating AI summary...") : __("Generating AI summary..."),
+		callback: (response) => {
+			if (response.exc) {
+				return;
+			}
+			const result = response.message;
+			const message = result.cache_hit
+				? __("Summary reused because its inputs have not changed.")
+				: result.generation_mode === "fallback"
+					? __("AI unavailable; a fallback summary was generated.")
+					: __("Summary generated successfully.");
+			frappe.show_alert({ message, indicator: result.generation_mode === "fallback" ? "orange" : "green" });
+			if (frm.doc.name === result.report_name) {
+				frm.reload_doc();
+			} else {
+				frappe.set_route("Form", "Kairos Day Report", result.report_name);
+			}
+		},
+	});
+}
 
 
 async function copy_report(frm, include_timeline) {

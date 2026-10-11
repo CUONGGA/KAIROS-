@@ -12,6 +12,7 @@
   "summary_context_max_events",
   "summary_context_max_chars",
   "prompt_section",
+  "summary_prompt_version",
   "day_report_system_prompt",
   "day_report_user_prompt_template"
  ],
@@ -69,6 +70,14 @@
    "fieldname": "prompt_section",
    "fieldtype": "Section Break",
    "label": "Day Report Prompts"
+  },
+  {
+   "default": "day-report@1",
+   "description": "Tăng version khi thay đổi contract/semantics của prompt; nội dung prompt cũng được hash tự động.",
+   "fieldname": "summary_prompt_version",
+   "fieldtype": "Data",
+   "label": "Summary Prompt Version",
+   "reqd": 1
   },
   {
    "default": "You are Kairos, a personal AI work assistant. Summarize the user's daily activity timeline into a clear Vietnamese day report suitable for pasting into Teams. Be concise, factual, and group related work. Do not invent events that are not in the timeline. Prefer bullet points and short sections (Done / In progress / Notes) when helpful.",

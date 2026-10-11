@@ -633,11 +633,16 @@ kiểm soát privacy/cost và mở rộng được cho collector mới. Thiết 
 | **C.5.1** | Event quality gate + redaction | Context không chứa raw/secret/path tuyệt đối | [x] |
 | **C.5.2** | Deterministic Context Builder @1 | Context hash, budget và reduction policy có test | [x] |
 | **C.5.3** | Structured output + evidence validation | Claim summary tham chiếu Event ref hợp lệ | [ ] |
-| **C.5.4** | Provenance, cache, async reliability | Có model/prompt/context metadata và fallback | [ ] |
+| **C.5.4** | Provenance, cache, async reliability | Metadata/cache đã có; background async còn pending | [ ] |
 | **C.5.5** | Evaluation + collector conformance | Golden suite và collector thứ hai pass | [ ] |
 
 **Gate C.5:** ≥95% claim có evidence, không leak secret/raw, fallback không mất report, và summary
 cần sửa tay đáng kể ở ≤20% ngày pilot. Chưa triển khai RAG trong phase này.
+
+- 2026-10-11 — C.5.4a triển khai provenance + cache bền trên Day Report: generation key gồm
+  date/context/model/prompt, cache hit không gọi lại LLM, Force Regenerate bỏ qua cache, fallback không
+  được cache, Redis lock chống gọi trùng và stale context không được ghi đè. Background job/metrics
+  của C.5.4 vẫn còn pending.
 
 ---
 

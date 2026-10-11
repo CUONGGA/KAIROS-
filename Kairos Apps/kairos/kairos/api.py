@@ -7,7 +7,7 @@ import json
 from collections.abc import Mapping
 
 import frappe
-from frappe.utils import cint
+from frappe.utils import cint, sbool
 
 from kairos.summary import generate_day_report_summary
 from kairos.timeline import generate_day_report_timeline
@@ -99,18 +99,21 @@ def generate_day_timeline(report_date=None):
 
 
 @frappe.whitelist()
-def generate_day_summary(report_date=None):
+def generate_day_summary(report_date=None, force=False):
 	"""Generate an LLM summary for a selected Day Report date."""
 	frappe.only_for("System Manager")
 	if not report_date:
 		frappe.throw("report_date is required.")
 
-	report = generate_day_report_summary(report_date)
+	result = generate_day_report_summary(report_date, force=sbool(force) is True)
+	report = result.report
 	return {
 		"report_name": report.name,
 		"report_date": report.report_date,
 		"status": report.status,
 		"summary_text": report.summary_text,
+		"generation_mode": report.generation_mode,
+		"cache_hit": result.cache_hit,
 	}
 
 
