@@ -50,6 +50,8 @@ class TestDayReportSummary(FrappeTestCase):
 	def setUp(self):
 		self.report_date = "2099-12-31"
 		self.external_id = "summary-event-2099"
+		self.llm_key_patcher = patch("kairos.summary.get_llm_api_key", return_value="test-key")
+		self.llm_key_patcher.start()
 		frappe.db.delete("Kairos Event", {"external_id": self.external_id})
 		frappe.db.delete("Kairos Day Report", {"report_date": self.report_date})
 		frappe.get_doc(
@@ -66,6 +68,7 @@ class TestDayReportSummary(FrappeTestCase):
 		).insert(ignore_permissions=True)
 
 	def tearDown(self):
+		self.llm_key_patcher.stop()
 		frappe.db.delete("Kairos Event", {"external_id": self.external_id})
 		frappe.db.delete("Kairos Day Report", {"report_date": self.report_date})
 
@@ -184,13 +187,16 @@ class TestDayReportSummary(FrappeTestCase):
 		self.assertEqual(mock_completion.call_count, 2)
 
 	@patch("kairos.summary.call_openai_chat_completions", return_value="Stale summary")
-	def test_does_not_save_result_when_generation_inputs_change(self, _mock_completion):
+	@patch("kairos.summary.get_llm_api_key", return_value="test-key")
+	def test_does_not_save_result_when_generation_inputs_change(self, _mock_api_key, _mock_completion):
 		initial_context = build_day_context(self.report_date)
 		changed_context = replace(initial_context, context_hash="f" * 64)
 
-		with patch("kairos.summary.build_day_context", side_effect=[initial_context, changed_context]):
+		with patch("kairos.summary.build_day_context", side_effect=[initial_context, changed_context]) as mock_context:
 			with self.assertRaises(frappe.ValidationError):
-				generate_day_report_summary(self.report_date)
+				generate_day_report_summary(self.report_date, force=True)
+
+		self.assertEqual(mock_context.call_count, 2)
 
 		report = frappe.get_doc("Kairos Day Report", self.report_date)
 		self.assertEqual(report.status, "draft")
