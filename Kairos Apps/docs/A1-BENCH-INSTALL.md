@@ -1,5 +1,8 @@
 # A1 — Cài bench & gắn app `kairos` (tự làm)
 
+> Cần runbook đầy đủ từ máy mới (WSL, env, collector, verify)? Xem
+> [NEW-MACHINE-SETUP.md](NEW-MACHINE-SETUP.md).
+
 Mục tiêu A1: app skeleton đã có trong repo → bạn **tự** cài Frappe Bench (học) → `get-app` / `install-app` → thấy **Kairos** trên site.
 
 Repo đã chuẩn bị code tại [`kairos/`](../kairos/). **Không** cần AI chạy lệnh cài bench giúp bạn.
@@ -71,11 +74,14 @@ Từ thư mục `frappe-bench`:
 
 ```bash
 # Cách A — path local (học trên cùng máy / mount)
-bench get-app "/mnt/c/Projects/Kairos Apps/kairos"
+bench get-app --soft-link "/mnt/c/Projects/Kairos Apps/kairos"
 
 # Cách B — nếu bạn clone repo lên VPS
-# bench get-app /path/to/Kairos\ Apps/kairos
+# bench get-app --soft-link /path/to/Kairos\ Apps/kairos
 ```
+
+`--soft-link` cần thiết vì `kairos/` nằm trong monorepo, không phải git repo riêng; nếu bỏ flag này,
+Bench sẽ cố `git clone` đường dẫn local và thất bại.
 
 Cài vào site:
 

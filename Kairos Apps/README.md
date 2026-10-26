@@ -43,11 +43,16 @@ Frappe Scheduler also refreshes a Timeline draft at 18:30 (server time); see
 
 ## Quick start
 
+For the complete new-machine runbook, including WSL setup, local environment files, collector
+configuration, end-to-end verification, and troubleshooting, see
+[docs/NEW-MACHINE-SETUP.md](docs/NEW-MACHINE-SETUP.md).
+
 Run these commands from your Frappe Bench directory, not this repository:
 
 ```bash
-git clone https://github.com/CUONGGA/KAIROS-.git
-bench get-app "/path/to/KAIROS-/Kairos Apps/kairos"
+# Clone outside Bench first, then run the Bench commands from the Bench directory.
+git clone https://github.com/CUONGGA/KAIROS-.git "/path/to/KAIROS-"
+bench get-app --soft-link "/path/to/KAIROS-/Kairos Apps/kairos"
 bench --site kairos.local install-app kairos
 bench --site kairos.local migrate
 bench start
