@@ -8,7 +8,11 @@
   "llm_model",
   "collection_enabled",
   "timezone",
+  "context_section",
+  "summary_context_max_events",
+  "summary_context_max_chars",
   "prompt_section",
+  "summary_prompt_version",
   "day_report_system_prompt",
   "day_report_user_prompt_template"
  ],
@@ -42,9 +46,38 @@
    "read_only": 1
   },
   {
+   "fieldname": "context_section",
+   "fieldtype": "Section Break",
+   "label": "Summary Context Policy"
+  },
+  {
+   "default": "150",
+   "description": "Số Event tối đa sau lọc trùng trước khi gửi LLM.",
+   "fieldname": "summary_context_max_events",
+   "fieldtype": "Int",
+   "label": "Summary Context Max Events",
+   "reqd": 1
+  },
+  {
+   "default": "50000",
+   "description": "Giới hạn ký tự JSON context đã sanitize, độc lập với provider.",
+   "fieldname": "summary_context_max_chars",
+   "fieldtype": "Int",
+   "label": "Summary Context Max Characters",
+   "reqd": 1
+  },
+  {
    "fieldname": "prompt_section",
    "fieldtype": "Section Break",
    "label": "Day Report Prompts"
+  },
+  {
+   "default": "day-report@1",
+   "description": "Tăng version khi thay đổi contract/semantics của prompt; nội dung prompt cũng được hash tự động.",
+   "fieldname": "summary_prompt_version",
+   "fieldtype": "Data",
+   "label": "Summary Prompt Version",
+   "reqd": 1
   },
   {
    "default": "You are Kairos, a personal AI work assistant. Summarize the user's daily activity timeline into a clear Vietnamese day report suitable for pasting into Teams. Be concise, factual, and group related work. Do not invent events that are not in the timeline. Prefer bullet points and short sections (Done / In progress / Notes) when helpful.",

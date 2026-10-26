@@ -12,7 +12,19 @@
   "status",
   "content_section",
   "timeline_text",
-  "summary_text"
+  "summary_text",
+  "provenance_section",
+  "generation_mode",
+  "generated_at",
+  "llm_model",
+  "prompt_version",
+  "prompt_hash",
+  "context_version",
+  "context_hash",
+  "generation_key",
+  "context_event_count",
+  "context_excluded_count",
+  "generation_error_code"
  ],
  "fields": [
   {
@@ -50,6 +62,80 @@
    "fieldname": "summary_text",
    "fieldtype": "Long Text",
    "label": "Summary"
+  },
+  {
+   "fieldname": "provenance_section",
+   "fieldtype": "Section Break",
+   "label": "Generation Provenance"
+  },
+  {
+   "fieldname": "generation_mode",
+   "fieldtype": "Select",
+   "label": "Generation Mode",
+   "options": "\nllm\nfallback\nmanual",
+   "read_only": 1
+  },
+  {
+   "fieldname": "generated_at",
+   "fieldtype": "Datetime",
+   "label": "Generated At (UTC)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "llm_model",
+   "fieldtype": "Data",
+   "label": "LLM Model",
+   "read_only": 1
+  },
+  {
+   "fieldname": "prompt_version",
+   "fieldtype": "Data",
+   "label": "Prompt Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "prompt_hash",
+   "fieldtype": "Data",
+   "label": "Prompt Hash",
+   "read_only": 1
+  },
+  {
+   "fieldname": "context_version",
+   "fieldtype": "Data",
+   "label": "Context Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "context_hash",
+   "fieldtype": "Data",
+   "label": "Context Hash",
+   "read_only": 1
+  },
+  {
+   "fieldname": "generation_key",
+   "fieldtype": "Data",
+   "label": "Generation Key",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "context_event_count",
+   "fieldtype": "Int",
+   "label": "Context Event Count",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "context_excluded_count",
+   "fieldtype": "Int",
+   "label": "Context Excluded Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "generation_error_code",
+   "fieldtype": "Data",
+   "label": "Generation Error Code",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,

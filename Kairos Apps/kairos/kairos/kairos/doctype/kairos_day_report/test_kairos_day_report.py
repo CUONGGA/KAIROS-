@@ -53,3 +53,21 @@ class TestKairosDayReport(FrappeTestCase):
 					"status": "published",
 				}
 			).insert(ignore_permissions=True)
+
+	def test_manual_summary_edit_invalidates_generation_cache(self):
+		report = frappe.get_doc(
+			{
+				"doctype": "Kairos Day Report",
+				"report_date": self.report_date,
+				"status": "ready",
+				"summary_text": "Generated summary",
+				"generation_mode": "llm",
+				"generation_key": "a" * 64,
+			}
+		).insert(ignore_permissions=True)
+
+		report.summary_text = "Manually edited summary"
+		report.save(ignore_permissions=True)
+
+		self.assertEqual(report.generation_mode, "manual")
+		self.assertFalse(report.generation_key)

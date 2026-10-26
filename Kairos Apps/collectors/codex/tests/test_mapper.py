@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from kairos_codex.mapper import map_session
-from kairos_codex.parser import parse_session_file
+from kairos_codex.parser import CodexSession, SessionItem, parse_session_file
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -37,3 +37,26 @@ class TestCodexMapper(unittest.TestCase):
 		session = parse_session_file(FIXTURES_DIR / "rollout-markup-only.jsonl").sessions[0]
 
 		self.assertEqual(map_session(session), [])
+
+	def test_redacts_secrets_before_persisting_event_text(self):
+		session = CodexSession(
+			session_id="quality-test",
+			path=FIXTURES_DIR / "quality-test.jsonl",
+			started_at="2026-09-01T02:00:00Z",
+			cwd="C:/Projects/Kairos Apps",
+			originator="cli",
+			items=(
+				SessionItem(
+					line_number=1,
+					record_type="event_msg",
+					timestamp="2026-09-01T02:00:01Z",
+					payload={"type": "user_message", "message": "Set password=super-secret-token"},
+				),
+			),
+		)
+
+		event = map_session(session)[0]
+
+		self.assertIn("password=[REDACTED]", event["title"])
+		self.assertNotIn("super-secret-token", event["summary"])
+		self.assertNotIn("super-secret-token", event["raw_payload"])

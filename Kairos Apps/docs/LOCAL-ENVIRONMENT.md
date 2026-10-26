@@ -37,7 +37,7 @@ For a one-off API test, load only the LLM file in the current shell:
 
 ```bash
 source ~/.config/kairos/llm.env
-cd ~/frappe-bench
+cd ~/kairos-bench
 bench --site kairos.local execute kairos.api.generate_day_summary \
   --kwargs '{"report_date":"2026-09-27"}'
 ```

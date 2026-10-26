@@ -22,3 +22,12 @@ class KairosDayReport(Document):
 				title="Kairos Day Report",
 			)
 
+		if (
+			not self.is_new()
+			and self.has_value_changed("summary_text")
+			and not self.flags.get("kairos_generation_save")
+		):
+			self.generation_mode = "manual"
+			self.generation_key = None
+			self.generation_error_code = None
+

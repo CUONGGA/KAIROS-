@@ -24,7 +24,7 @@ timedatectl | grep "Time zone"
 After updating the app:
 
 ```bash
-cd ~/frappe-bench
+cd ~/kairos-bench
 bench --site kairos.local migrate
 bench --site kairos.local enable-scheduler
 bench --site kairos.local scheduler status
@@ -38,7 +38,7 @@ Bench supervisor/systemd services include the scheduler worker.
 Run the same function without waiting until 18:30:
 
 ```bash
-cd ~/frappe-bench
+cd ~/kairos-bench
 bench --site kairos.local execute kairos.scheduler.generate_daily_draft
 ```
 

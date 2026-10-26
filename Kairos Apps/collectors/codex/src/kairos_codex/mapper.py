@@ -71,12 +71,12 @@ def _map_item(session: CodexSession, item: SessionItem, kind: str) -> dict | Non
 		"event_id": f"codex:{external_id}",
 		"occurred_at": occurred_at,
 		"activity_date": activity_date,
-		"title": title,
-		"summary": _summary(kind, text, project),
+		"title": _sanitize_for_event(title, TITLE_MAX),
+		"summary": _sanitize_for_event(_summary(kind, text, project), SUMMARY_MAX),
 		"kind": kind,
 		"status": status,
 		"duration_seconds": _duration_seconds(item),
-		"project": project,
+		"project": _sanitize_for_event(project, 80) if project else None,
 		"tags": f"session:{session.session_id},{session.originator or 'cli'}",
 		"raw_payload": json.dumps(
 			{
@@ -84,7 +84,7 @@ def _map_item(session: CodexSession, item: SessionItem, kind: str) -> dict | Non
 				"item_id": item_id,
 				"type": item.payload.get("type") or item.record_type,
 				"rollout_path": str(PurePath(session.path)),
-				"snippet": text[:SUMMARY_MAX],
+				"snippet": _sanitize_for_event(text, SUMMARY_MAX),
 			},
 			ensure_ascii=False,
 		),
@@ -171,6 +171,27 @@ def _project_name(cwd: str | None) -> str | None:
 	if not cwd:
 		return None
 	return cwd.rstrip("/\\").replace("\\", "/").rsplit("/", maxsplit=1)[-1] or None
+
+
+def _sanitize_for_event(value: object, max_length: int) -> str:
+	"""Redact common credentials before persisting fields that may become LLM context."""
+	text = " ".join(str(value or "").replace("\x00", " ").split())
+	text = re.sub(
+		r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
+		"[REDACTED PRIVATE KEY]",
+		text,
+		flags=re.IGNORECASE,
+	)
+	text = re.sub(r"\bBearer\s+[A-Za-z0-9._~+/=-]{8,}\b", "Bearer [REDACTED]", text, flags=re.IGNORECASE)
+	text = re.sub(
+		r"\b(api[_-]?key|access[_-]?token|auth(?:orization)?|client[_-]?secret|password|secret|token)"
+		r"(\s*[:=]\s*)([\"']?)([^\s,;\"'}\]]+)(?:\3)",
+		r"\1\2[REDACTED]",
+		text,
+		flags=re.IGNORECASE,
+	)
+	text = re.sub(r"\b([a-z][a-z0-9+.-]*://)[^\s/@:]+(?::[^\s/@]+)?@", r"\1[REDACTED]@", text, flags=re.I)
+	return text[:max_length].rstrip()
 
 
 def _activity_date(timestamp: str | None) -> str | None:

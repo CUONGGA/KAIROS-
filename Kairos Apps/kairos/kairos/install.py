@@ -5,20 +5,25 @@ from __future__ import annotations
 
 import frappe
 
+from kairos.kairos.doctype.kairos_settings.kairos_settings import ensure_defaults
+
 KAIROS_COLLECTOR_ROLE = "Kairos Collector"
 
 
 def after_install():
 	ensure_collector_role()
+	ensure_defaults()
 
 
 def after_migrate():
 	ensure_collector_role()
+	ensure_defaults()
 
 
 def ensure_collector_role():
-	"""Create the non-Desk role used by the external event collector."""
+	"""Create or reconcile the non-Desk role used by the external event collector."""
 	if frappe.db.exists("Role", KAIROS_COLLECTOR_ROLE):
+		frappe.db.set_value("Role", KAIROS_COLLECTOR_ROLE, "desk_access", 0, update_modified=False)
 		return
 
 	frappe.get_doc(

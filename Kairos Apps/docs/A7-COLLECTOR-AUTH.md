@@ -9,7 +9,7 @@ bench --site kairos.local migrate
 In Desk, create a dedicated enabled user such as `kairos-collector@example.invalid`, assign the **Kairos Collector** role, then use the user's **API Access** section to generate an API key and secret. Keep the secret only in the developer machine's environment:
 
 ```bash
-export KAIROS_FRAPPE_URL="http://kairos.local:8001"
+export KAIROS_FRAPPE_URL="http://kairos.local:8002"
 export KAIROS_FRAPPE_TOKEN="<api_key>:<api_secret>"
 ```
 
