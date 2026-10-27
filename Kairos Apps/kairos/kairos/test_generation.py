@@ -17,6 +17,10 @@ def _context(context_hash="a" * 64):
 		deduplicated_count=0,
 		truncated_count=0,
 		exclusion_reasons={},
+		evidence_index={},
+		project_event_counts={},
+		selected_project_counts={},
+		project_order=(),
 	)
 
 

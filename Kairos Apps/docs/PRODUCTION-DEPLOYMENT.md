@@ -13,7 +13,7 @@ sẵn sàng production.
 | Thành phần | Hiện trạng | Production readiness |
 | --- | --- | --- |
 | Frappe app | DocType, API ingest, Timeline, Summary, Copy và scheduler đã chạy local | Cần đóng các gate còn lại |
-| Roadmap | C1–C5, C.5.1–C.5.3 và C.5.4a hoàn thành | C.5.4b/C.5.4c, C.5.5 và Phase D chưa hoàn thành |
+| Roadmap | C1–C5, C.5.1–C.5.3b và C.5.4a hoàn thành | C.5.4b/C.5.4c, C.5.5 và Phase D chưa hoàn thành |
 | Runtime | Hai Bench development trong WSL: LMS và Kairos; Kairos dùng web `8002` | `bench start` không dùng cho production |
 | Collector | Codex collector incremental, checkpoint, batch và Windows Task Scheduler | Cần đổi URL sang HTTPS production và kiểm tra token rotation/retry |
 | Nguồn dữ liệu | Chỉ `codex` là nguồn MVP | Git, Cursor, ChatGPT, terminal vẫn là backlog |

@@ -32,8 +32,8 @@ class KairosSettings(Document):
 			frappe.throw("summary_context_max_events phải trong khoảng 1 đến 500.", title="Kairos Settings")
 		if not 500 <= int(self.summary_context_max_chars or 0) <= 200_000:
 			frappe.throw("summary_context_max_chars phải trong khoảng 500 đến 200000.", title="Kairos Settings")
-		if not 300 <= int(self.summary_output_max_chars or 0) <= 12_000:
-			frappe.throw("summary_output_max_chars phải trong khoảng 300 đến 12000.", title="Kairos Settings")
+		if not 1_000 <= int(self.summary_output_max_chars or 0) <= 12_000:
+			frappe.throw("summary_output_max_chars phải trong khoảng 1000 đến 12000.", title="Kairos Settings")
 
 
 def ensure_defaults():
@@ -47,7 +47,7 @@ def ensure_defaults():
 		"timezone": "Asia/Ho_Chi_Minh",
 		"summary_context_max_events": 150,
 		"summary_context_max_chars": 50_000,
-		"summary_output_max_chars": 1_200,
+		"summary_output_max_chars": 4_000,
 		"summary_prompt_version": "day-report@1",
 		"day_report_system_prompt": DEFAULT_SYSTEM_PROMPT,
 		"day_report_user_prompt_template": DEFAULT_USER_PROMPT_TEMPLATE,

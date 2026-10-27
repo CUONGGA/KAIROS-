@@ -68,8 +68,8 @@
    "reqd": 1
   },
   {
-   "default": "1200",
-   "description": "Maximum rendered Day Report characters, including evidence citations.",
+   "default": "4000",
+   "description": "Maximum rendered multi-project Day Report characters, including evidence citations.",
    "fieldname": "summary_output_max_chars",
    "fieldtype": "Int",
    "label": "Summary Output Max Characters",

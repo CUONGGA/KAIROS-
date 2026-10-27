@@ -16,9 +16,14 @@ from kairos.summary import build_llm_safe_timeline, call_openai_chat_completions
 
 VALID_SUMMARY_JSON = json.dumps(
 	{
-		"done": [{"text": "Hoan thanh tong hop.", "evidence": ["E001"]}],
-		"in_progress": [],
-		"risks_or_notes": [],
+		"projects": [
+			{
+				"project": "Kairos Apps",
+				"done": [{"text": "Hoan thanh tong hop.", "evidence": ["E001"]}],
+				"in_progress": [],
+				"risks_or_notes": [],
+			}
+		],
 		"omissions": [],
 	}
 )
@@ -72,6 +77,7 @@ class TestDayReportSummary(FrappeTestCase):
 				"event_id": f"codex:{self.external_id}",
 				"occurred_at": "2099-12-31T02:00:00Z",
 				"title": "Implement summary generation",
+				"project": "Kairos Apps",
 				"kind": "message",
 				"status": "ok",
 			}
@@ -102,7 +108,7 @@ class TestDayReportSummary(FrappeTestCase):
 		)
 		self.assertIn("Implement summary generation", mock_completion.call_args.kwargs["messages"][1]["content"])
 		message = mock_completion.call_args.kwargs["messages"][1]["content"]
-		self.assertIn('"schema_version":"kairos.summary_context@1"', message)
+		self.assertIn('"schema_version":"kairos.summary_context@2"', message)
 		self.assertNotIn("raw_payload", message)
 
 	@patch("kairos.summary.frappe.log_error")
@@ -115,6 +121,7 @@ class TestDayReportSummary(FrappeTestCase):
 		self.assertEqual(report.status, "ready")
 		self.assertIn("Bản tóm tắt dự phòng", report.summary_text)
 		self.assertIn("Implement summary generation", report.summary_text)
+		self.assertIn("### Kairos Apps", report.summary_text)
 		self.assertEqual(report.generation_mode, "fallback")
 		self.assertFalse(report.generation_key)
 		self.assertEqual(report.generation_error_code, "provider_unavailable")
@@ -162,7 +169,7 @@ class TestDayReportSummary(FrappeTestCase):
 		request = json.loads(self.llm_server.request_body)
 		self.assertEqual(request["model"], frappe.get_single("Kairos Settings").llm_model)
 		self.assertIn("Implement summary generation", request["messages"][1]["content"])
-		self.assertIn('"schema_version":"kairos.summary_context@1"', request["messages"][1]["content"])
+		self.assertIn('"schema_version":"kairos.summary_context@2"', request["messages"][1]["content"])
 
 	@patch("kairos.summary.call_openai_chat_completions", return_value=VALID_SUMMARY_JSON)
 	def test_reuses_successful_summary_for_identical_inputs(self, mock_completion):

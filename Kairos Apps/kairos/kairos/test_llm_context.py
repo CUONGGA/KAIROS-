@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from kairos.llm_context import ContextPolicy, build_summary_context_from_events
+from kairos.llm_context import (
+	CONTEXT_SCHEMA_VERSION,
+	UNKNOWN_PROJECT,
+	ContextPolicy,
+	build_summary_context_from_events,
+)
 
 
 class TestSummaryContext(TestCase):
@@ -43,6 +48,10 @@ class TestSummaryContext(TestCase):
 		self.assertEqual(context.envelope["events"][0]["occurrence_count"], 2)
 		self.assertIn("deterministic JSON envelope", context.to_json())
 		self.assertNotIn("raw-payload-secret", context.to_json())
+		self.assertEqual(CONTEXT_SCHEMA_VERSION, "kairos.summary_context@2")
+		self.assertEqual(context.evidence_index["E001"].project, "Kairos")
+		self.assertEqual(context.evidence_index["E001"].event_id, "codex:2")
+		self.assertNotIn("codex:2", context.to_json())
 
 	def test_applies_event_and_character_budgets_without_cutting_json(self):
 		events = [
@@ -104,3 +113,77 @@ class TestSummaryContext(TestCase):
 
 		self.assertEqual([event["ref"] for event in context.envelope["events"]], ["E001", "E002"])
 		self.assertEqual(context.exclusion_reasons["system_or_markup"], 1)
+		self.assertEqual(context.evidence_index["E001"].project, UNKNOWN_PROJECT)
+
+	def test_does_not_deduplicate_identical_titles_across_projects(self):
+		events = [
+			{
+				"occurred_at": "2099-12-31T01:00:00Z",
+				"event_id": "codex:kairos",
+				"source": "codex",
+				"kind": "message",
+				"title": "Fix authentication",
+				"project": "Kairos Apps",
+			},
+			{
+				"occurred_at": "2099-12-31T01:05:00Z",
+				"event_id": "codex:gasco",
+				"source": "codex",
+				"kind": "message",
+				"title": "Fix authentication",
+				"project": "Gasco-Platform",
+			},
+		]
+
+		context = build_summary_context_from_events(events, "2099-12-31")
+
+		self.assertEqual(context.selected_count, 2)
+		self.assertEqual(context.deduplicated_count, 0)
+		self.assertEqual(
+			{reference.project for reference in context.evidence_index.values()},
+			{"Kairos Apps", "Gasco-Platform"},
+		)
+
+	def test_balances_selection_across_ten_projects_deterministically(self):
+		events = []
+		for project_number in range(10):
+			for event_number in range(3):
+				events.append(
+					{
+						"occurred_at": f"2099-12-31T{event_number:02d}:{project_number:02d}:00Z",
+						"event_id": f"codex:{project_number}:{event_number}",
+						"source": "codex",
+						"kind": "message",
+						"title": f"Project {project_number} event {event_number}",
+						"project": f"Project {project_number:02d}",
+					}
+				)
+
+		policy = ContextPolicy(max_events=10, max_chars=20_000)
+		context = build_summary_context_from_events(events, "2099-12-31", policy)
+		reversed_context = build_summary_context_from_events(list(reversed(events)), "2099-12-31", policy)
+
+		self.assertEqual(context.context_hash, reversed_context.context_hash)
+		self.assertEqual(context.selected_count, 10)
+		self.assertEqual(len(context.selected_project_counts), 10)
+		self.assertTrue(all(count == 1 for count in context.selected_project_counts.values()))
+		self.assertEqual(context.envelope["meta"]["source_project_count"], 10)
+		self.assertEqual(context.envelope["meta"]["selected_project_count"], 10)
+
+	def test_normalizes_missing_project_to_unknown(self):
+		context = build_summary_context_from_events(
+			[
+				{
+					"occurred_at": "2099-12-31T01:00:00Z",
+					"event_id": "codex:no-project",
+					"source": "codex",
+					"kind": "message",
+					"title": "Unclassified work",
+					"project": "   ",
+				}
+			],
+			"2099-12-31",
+		)
+
+		self.assertEqual(context.envelope["events"][0]["project"], UNKNOWN_PROJECT)
+		self.assertEqual(context.project_order, (UNKNOWN_PROJECT,))

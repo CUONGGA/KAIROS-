@@ -19,9 +19,22 @@ from kairos.api import generate_day_summary, upsert_events
 
 ENDPOINT_SUMMARY_JSON = json.dumps(
 	{
-		"done": [{"text": "Da kiem tra endpoint.", "evidence": ["E001"]}],
-		"in_progress": [],
-		"risks_or_notes": [],
+		"projects": [
+			{
+				"project": "Endpoint Project",
+				"done": [{"text": "Da kiem tra endpoint.", "evidence": ["E001"]}],
+				"in_progress": [],
+				"risks_or_notes": [],
+			},
+			{
+				"project": "Second Project",
+				"done": [],
+				"in_progress": [
+					{"text": "Dang kiem tra project thu hai.", "evidence": ["E002"]}
+				],
+				"risks_or_notes": [],
+			}
+		],
 		"omissions": [],
 	}
 )
@@ -34,6 +47,7 @@ class _EndpointFakeOpenAIHandler(BaseHTTPRequestHandler):
 			return
 
 		self.server.request_body = self.rfile.read(int(self.headers["Content-Length"]))
+		self.server.request_bodies.append(self.server.request_body)
 		content = getattr(self.server, "response_content", ENDPOINT_SUMMARY_JSON)
 		body = json.dumps({"choices": [{"message": {"content": content}}]}).encode()
 		self.send_response(200)
@@ -116,12 +130,15 @@ class TestKairosMethodEndpoints(FrappeAPITestCase):
 
 	report_date = "2098-12-31"
 	external_id = "endpoint-e2e-2098"
+	second_external_id = "endpoint-e2e-second-2098"
 	event_id = f"codex:{external_id}"
+	second_event_id = f"codex:{second_external_id}"
 
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
 		cls.llm_server = ThreadingHTTPServer(("127.0.0.1", 0), _EndpointFakeOpenAIHandler)
+		cls.llm_server.request_bodies = []
 		cls.llm_thread = threading.Thread(target=cls.llm_server.serve_forever, daemon=True)
 		cls.llm_thread.start()
 
@@ -135,15 +152,16 @@ class TestKairosMethodEndpoints(FrappeAPITestCase):
 	def setUp(self):
 		super().setUp()
 		self.llm_server.response_content = ENDPOINT_SUMMARY_JSON
+		self.llm_server.request_bodies = []
 		self.original_collection_enabled = frappe.db.get_single_value(
 			"Kairos Settings", "collection_enabled"
 		)
 		frappe.db.set_single_value("Kairos Settings", "collection_enabled", 1)
-		frappe.db.delete("Kairos Event", {"event_id": self.event_id})
+		frappe.db.delete("Kairos Event", {"event_id": ["in", [self.event_id, self.second_event_id]]})
 		frappe.db.delete("Kairos Day Report", {"report_date": self.report_date})
 
 	def tearDown(self):
-		frappe.db.delete("Kairos Event", {"event_id": self.event_id})
+		frappe.db.delete("Kairos Event", {"event_id": ["in", [self.event_id, self.second_event_id]]})
 		frappe.db.delete("Kairos Day Report", {"report_date": self.report_date})
 		frappe.db.set_single_value(
 			"Kairos Settings", "collection_enabled", self.original_collection_enabled
@@ -151,34 +169,81 @@ class TestKairosMethodEndpoints(FrappeAPITestCase):
 		frappe.db.commit()
 		super().tearDown()
 
-	def _upsert_event(self):
+	def _event_payloads(self):
+		return [
+			{
+				"source": "codex",
+				"external_id": self.external_id,
+				"occurred_at": "2098-12-31T02:00:00Z",
+				"kind": "agent_run",
+				"status": "ok",
+				"title": "Complete endpoint E2E coverage",
+				"summary": "Verified event, timeline, and summary method endpoints.",
+				"project": "Endpoint Project",
+			},
+			{
+				"source": "codex",
+				"external_id": self.second_external_id,
+				"occurred_at": "2098-12-31T03:00:00Z",
+				"kind": "message",
+				"status": "ok",
+				"title": "Verify a second project",
+				"summary": "Exercises project-aware evidence validation.",
+				"project": "Second Project",
+			},
+		]
+
+	def _upsert_events(self, events=None):
 		return self.post(
 			self.method("kairos.api.upsert_events"),
 			{
 				"sid": self.sid,
-				"events": [
-					{
-						"source": "codex",
-						"external_id": self.external_id,
-						"occurred_at": "2098-12-31T02:00:00Z",
-						"kind": "agent_run",
-						"status": "ok",
-						"title": "Complete endpoint E2E coverage",
-						"summary": "Verified event, timeline, and summary method endpoints.",
-					},
-				],
+				"events": events or self._event_payloads(),
 			},
 		)
 
-	def test_upsert_events_endpoint(self):
-		response = self._upsert_event()
+	def test_upsert_events_endpoint_creates_and_updates_multiple_projects(self):
+		response = self._upsert_events()
 
 		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.json["message"]["created"], 1)
-		self.assertEqual(response.json["message"]["created_event_ids"], [self.event_id])
+		self.assertEqual(response.json["message"]["created"], 2)
+		self.assertEqual(
+			response.json["message"]["created_event_ids"], [self.event_id, self.second_event_id]
+		)
+		timeline = self.post(
+			self.method("kairos.api.generate_day_timeline"),
+			{"sid": self.sid, "report_date": self.report_date},
+		)
+		self.assertEqual(timeline.status_code, 200)
+		self.assertIn("(Endpoint Project)", timeline.json["message"]["timeline_text"])
+		self.assertIn("(Second Project)", timeline.json["message"]["timeline_text"])
+
+		updated_payloads = self._event_payloads()
+		updated_payloads[0]["title"] = "Updated endpoint E2E coverage"
+		updated = self._upsert_events(updated_payloads)
+		self.assertEqual(updated.status_code, 200)
+		self.assertEqual(updated.json["message"]["updated"], 2)
+		updated_timeline = self.post(
+			self.method("kairos.api.generate_day_timeline"),
+			{"sid": self.sid, "report_date": self.report_date},
+		)
+		self.assertEqual(updated_timeline.status_code, 200)
+		self.assertIn("Updated endpoint E2E coverage", updated_timeline.json["message"]["timeline_text"])
+
+	def test_upsert_events_endpoint_rejects_duplicate_batch_atomically(self):
+		duplicate = self._event_payloads()[0]
+		response = self._upsert_events([duplicate, dict(duplicate)])
+
+		self.assertNotEqual(response.status_code, 200)
+		timeline = self.post(
+			self.method("kairos.api.generate_day_timeline"),
+			{"sid": self.sid, "report_date": self.report_date},
+		)
+		self.assertEqual(timeline.status_code, 200)
+		self.assertEqual(timeline.json["message"]["event_count"], 0)
 
 	def test_generate_day_timeline_endpoint(self):
-		self.assertEqual(self._upsert_event().status_code, 200)
+		self.assertEqual(self._upsert_events().status_code, 200)
 
 		response = self.post(
 			self.method("kairos.api.generate_day_timeline"),
@@ -186,11 +251,19 @@ class TestKairosMethodEndpoints(FrappeAPITestCase):
 		)
 
 		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.json["message"]["event_count"], 1)
+		self.assertEqual(response.json["message"]["event_count"], 2)
 		self.assertIn("Complete endpoint E2E coverage", response.json["message"]["timeline_text"])
+		self.assertIn("(Endpoint Project)", response.json["message"]["timeline_text"])
+		self.assertIn("(Second Project)", response.json["message"]["timeline_text"])
+
+	def test_generate_day_timeline_endpoint_requires_report_date(self):
+		response = self.post(self.method("kairos.api.generate_day_timeline"), {"sid": self.sid})
+
+		self.assertNotEqual(response.status_code, 200)
+		self.assertFalse(frappe.db.exists("Kairos Day Report", self.report_date))
 
 	def test_generate_day_summary_endpoint(self):
-		self.assertEqual(self._upsert_event().status_code, 200)
+		self.assertEqual(self._upsert_events().status_code, 200)
 
 		base_url = f"http://127.0.0.1:{self.llm_server.server_port}/v1"
 		with patch.dict(
@@ -204,19 +277,54 @@ class TestKairosMethodEndpoints(FrappeAPITestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.json["message"]["status"], "ready")
+		self.assertIn("### Endpoint Project", response.json["message"]["summary_text"])
+		self.assertIn("### Second Project", response.json["message"]["summary_text"])
 		self.assertIn("Da kiem tra endpoint. [E001]", response.json["message"]["summary_text"])
+		self.assertIn("Dang kiem tra project thu hai. [E002]", response.json["message"]["summary_text"])
 		self.assertEqual(response.json["message"]["generation_mode"], "llm")
 		self.assertFalse(response.json["message"]["cache_hit"])
 		request = json.loads(self.llm_server.request_body)
-		self.assertIn('"schema_version":"kairos.summary_context@1"', request["messages"][1]["content"])
+		self.assertIn('"schema_version":"kairos.summary_context@2"', request["messages"][1]["content"])
+		self.assertNotIn(self.event_id, request["messages"][1]["content"])
 
-	def test_generate_day_summary_endpoint_falls_back_for_invalid_evidence(self):
-		self.assertEqual(self._upsert_event().status_code, 200)
+	def test_generate_day_summary_endpoint_reuses_cache_and_force_bypasses_it(self):
+		self.assertEqual(self._upsert_events().status_code, 200)
+		base_url = f"http://127.0.0.1:{self.llm_server.server_port}/v1"
+		with patch.dict(
+			os.environ,
+			{"KAIROS_LLM_API_KEY": "endpoint-e2e-key", "KAIROS_LLM_BASE_URL": base_url},
+		):
+			first = self.post(
+				self.method("kairos.api.generate_day_summary"),
+				{"sid": self.sid, "report_date": self.report_date},
+			)
+			second = self.post(
+				self.method("kairos.api.generate_day_summary"),
+				{"sid": self.sid, "report_date": self.report_date},
+			)
+			forced = self.post(
+				self.method("kairos.api.generate_day_summary"),
+				{"sid": self.sid, "report_date": self.report_date, "force": "true"},
+			)
+
+		self.assertEqual(first.status_code, 200)
+		self.assertFalse(first.json["message"]["cache_hit"])
+		self.assertTrue(second.json["message"]["cache_hit"])
+		self.assertFalse(forced.json["message"]["cache_hit"])
+		self.assertEqual(len(self.llm_server.request_bodies), 2)
+
+	def test_generate_day_summary_endpoint_falls_back_for_cross_project_evidence(self):
+		self.assertEqual(self._upsert_events().status_code, 200)
 		self.llm_server.response_content = json.dumps(
 			{
-				"done": [{"text": "Unsupported claim.", "evidence": ["E999"]}],
-				"in_progress": [],
-				"risks_or_notes": [],
+				"projects": [
+					{
+						"project": "Endpoint Project",
+						"done": [{"text": "Cross-project claim.", "evidence": ["E002"]}],
+						"in_progress": [],
+						"risks_or_notes": [],
+					}
+				],
 				"omissions": [],
 			}
 		)
@@ -233,3 +341,11 @@ class TestKairosMethodEndpoints(FrappeAPITestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.json["message"]["status"], "ready")
 		self.assertEqual(response.json["message"]["generation_mode"], "fallback")
+		self.assertIn("### Endpoint Project", response.json["message"]["summary_text"])
+		self.assertIn("### Second Project", response.json["message"]["summary_text"])
+		self.assertEqual(len(self.llm_server.request_bodies), 2)
+
+	def test_generate_day_summary_endpoint_requires_report_date(self):
+		response = self.post(self.method("kairos.api.generate_day_summary"), {"sid": self.sid})
+
+		self.assertNotEqual(response.status_code, 200)

@@ -636,8 +636,9 @@ kiểm soát privacy/cost và mở rộng được cho collector mới. Thiết 
 | # | Việc | Done khi | TT |
 |---|------|----------|----|
 | **C.5.1** | Event quality gate + redaction | Context không chứa raw/secret/path tuyệt đối | [x] |
-| **C.5.2** | Deterministic Context Builder @1 | Context hash, budget và reduction policy có test | [x] |
+| **C.5.2** | Deterministic Context Builder @2 | Context hash, budget và reduction policy có test | [x] |
 | **C.5.3** | Structured output + evidence validation | Claim summary tham chiếu Event ref hợp lệ | [x] |
+| **C.5.3b** | Multi-project grounded summary | Claim được nhóm theo project; evidence đúng project; selection cân bằng | [x] |
 | **C.5.4a** | Provenance + cache | Metadata, cache/idempotency và stale-input guard | [x] |
 | **C.5.4b** | Validated audit snapshot | Lưu claim đã validate + E-ref → event_id, retention và audit API | [ ] |
 | **C.5.4c** | Async reliability | Background job, retry transient và metrics/log taxonomy | [ ] |
@@ -645,6 +646,14 @@ kiểm soát privacy/cost và mở rộng được cho collector mới. Thiết 
 
 **Gate C.5:** ≥95% claim có evidence, không leak secret/raw, fallback không mất report, và summary
 cần sửa tay đáng kể ở ≤20% ngày pilot. Chưa triển khai RAG trong phase này.
+
+Kế hoạch C.5.3b: [`docs/C5.3B-MULTI-PROJECT-SUMMARY-PLAN.md`](./docs/C5.3B-MULTI-PROJECT-SUMMARY-PLAN.md).
+Trước C.5.3b, contract `summary_output@1` chỉ nhóm theo trạng thái và chưa kiểm tra project/evidence.
+Giới hạn đó đã được xử lý bằng context/output schema `@2`.
+
+- 2026-10-27 — C.5.3b đã nâng context/output lên schema `@2`: evidence index giữ nội bộ,
+  project-aware deduplication, round-robin selection, validator chặn cross-project evidence,
+  renderer/fallback nhóm theo project và HTTP E2E cho cả ba endpoint. Toàn bộ 59 test/11 module pass.
 
 - 2026-10-11 — C.5.4a triển khai provenance + cache bền trên Day Report: generation key gồm
   date/context/model/prompt, cache hit không gọi lại LLM, Force Regenerate bỏ qua cache, fallback không

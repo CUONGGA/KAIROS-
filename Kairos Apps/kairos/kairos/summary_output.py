@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 
-SUMMARY_OUTPUT_SCHEMA_VERSION = "kairos.summary_output@1"
-DEFAULT_MAX_OUTPUT_CHARS = 1_200
+SUMMARY_OUTPUT_SCHEMA_VERSION = "kairos.summary_output@2"
+DEFAULT_MAX_OUTPUT_CHARS = 4_000
 MAX_CLAIM_CHARS = 500
 MAX_OMISSION_CHARS = 240
 SECTION_NAMES = ("done", "in_progress", "risks_or_notes")
-REQUIRED_KEYS = frozenset((*SECTION_NAMES, "omissions"))
+REQUIRED_KEYS = frozenset(("projects", "omissions"))
+PROJECT_KEYS = frozenset(("project", *SECTION_NAMES))
 
 
 class SummaryOutputValidationError(ValueError):
@@ -26,20 +28,29 @@ class SummaryClaim:
 
 
 @dataclass(frozen=True)
-class StructuredSummary:
-	"""Provider-independent, validated representation of a daily report."""
+class ProjectSummary:
+	"""Validated claims for exactly one project from the supplied context."""
 
+	project: str
 	done: tuple[SummaryClaim, ...]
 	in_progress: tuple[SummaryClaim, ...]
 	risks_or_notes: tuple[SummaryClaim, ...]
+
+
+@dataclass(frozen=True)
+class StructuredSummary:
+	"""Provider-independent, validated representation of a multi-project daily report."""
+
+	projects: tuple[ProjectSummary, ...]
 	omissions: tuple[str, ...]
 
 
 def parse_and_validate_summary_output(
 	raw_output: str,
-	allowed_refs: set[str] | frozenset[str] | tuple[str, ...] | list[str],
+	evidence_projects: Mapping[str, str],
+	project_order: tuple[str, ...] | list[str] | None = None,
 ) -> StructuredSummary:
-	"""Parse provider JSON and reject claims without evidence from the supplied context."""
+	"""Reject malformed claims and evidence that is missing or belongs to another project."""
 	if not isinstance(raw_output, str) or not raw_output.strip():
 		raise SummaryOutputValidationError("output must be a non-empty JSON object")
 
@@ -53,35 +64,39 @@ def parse_and_validate_summary_output(
 	if set(payload) != REQUIRED_KEYS:
 		raise SummaryOutputValidationError("output has missing or unsupported top-level fields")
 
-	known_refs = {str(reference) for reference in allowed_refs}
+	known_evidence = {str(reference): str(project) for reference, project in evidence_projects.items()}
+	ordered_projects = tuple(project_order or sorted(set(known_evidence.values()), key=str.casefold))
 	return StructuredSummary(
-		done=_parse_claims(payload["done"], "done", known_refs),
-		in_progress=_parse_claims(payload["in_progress"], "in_progress", known_refs),
-		risks_or_notes=_parse_claims(payload["risks_or_notes"], "risks_or_notes", known_refs),
+		projects=_parse_projects(payload["projects"], known_evidence, ordered_projects),
 		omissions=_parse_omissions(payload["omissions"]),
 	)
 
 
 def render_summary_markdown(summary: StructuredSummary, report_date, *, max_chars: int) -> str:
 	"""Render validated claims into Kairos-owned Markdown with visible evidence citations."""
-	sections = (
-		("Ho\u00e0n th\u00e0nh", summary.done),
-		("\u0110ang th\u1ef1c hi\u1ec7n", summary.in_progress),
-		("R\u1ee7i ro / ghi ch\u00fa", summary.risks_or_notes),
-	)
 	lines = [f"## Báo cáo ngày {report_date}"]
-	for heading, claims in sections:
-		if not claims:
+	for project_summary in summary.projects:
+		sections = (
+			("Hoàn thành", project_summary.done),
+			("Đang thực hiện", project_summary.in_progress),
+			("Rủi ro / ghi chú", project_summary.risks_or_notes),
+		)
+		lines.extend(("", f"### {project_summary.project}"))
+		if not any(claims for _heading, claims in sections):
+			lines.append("- Không có claim đủ điều kiện cho project này.")
 			continue
-		lines.extend(("", f"### {heading}"))
-		lines.extend(f"- {claim.text} [{', '.join(claim.evidence)}]" for claim in claims)
+		for heading, claims in sections:
+			if not claims:
+				continue
+			lines.extend(("", f"#### {heading}"))
+			lines.extend(f"- {claim.text} [{', '.join(claim.evidence)}]" for claim in claims)
 
 	if summary.omissions:
-		lines.extend(("", "### Ph\u1ea1m vi ch\u01b0a bao g\u1ed3m"))
+		lines.extend(("", "### Phạm vi chưa bao gồm"))
 		lines.extend(f"- {item}" for item in summary.omissions)
 
 	if len(lines) == 1:
-		lines.extend(("", "- Kh\u00f4ng c\u00f3 ho\u1ea1t \u0111\u1ed9ng \u0111\u1ee7 \u0111i\u1ec1u ki\u1ec7n \u0111\u1ec3 t\u1ed5ng h\u1ee3p."))
+		lines.extend(("", "- Không có hoạt động đủ điều kiện để tổng hợp."))
 
 	rendered = "\n".join(lines)
 	if len(rendered) > max_chars:
@@ -89,7 +104,44 @@ def render_summary_markdown(summary: StructuredSummary, report_date, *, max_char
 	return rendered
 
 
-def _parse_claims(value: object, section: str, allowed_refs: set[str]) -> tuple[SummaryClaim, ...]:
+def _parse_projects(
+	value: object, evidence_projects: dict[str, str], project_order: tuple[str, ...]
+) -> tuple[ProjectSummary, ...]:
+	if not isinstance(value, list):
+		raise SummaryOutputValidationError("projects must be an array")
+
+	allowed_projects = set(evidence_projects.values())
+	projects_by_name = {}
+	for item in value:
+		if not isinstance(item, dict) or set(item) != PROJECT_KEYS:
+			raise SummaryOutputValidationError("project summaries contain unsupported or missing fields")
+		project = _normalized_text(item["project"], 80, "project")
+		if project not in allowed_projects:
+			raise SummaryOutputValidationError("project does not exist in the supplied context")
+		if project in projects_by_name:
+			raise SummaryOutputValidationError("project appears more than once")
+		projects_by_name[project] = ProjectSummary(
+			project=project,
+			done=_parse_claims(item["done"], "done", evidence_projects, project),
+			in_progress=_parse_claims(
+				item["in_progress"], "in_progress", evidence_projects, project
+			),
+			risks_or_notes=_parse_claims(
+				item["risks_or_notes"], "risks_or_notes", evidence_projects, project
+			),
+		)
+	missing_projects = allowed_projects - set(projects_by_name)
+	if missing_projects:
+		raise SummaryOutputValidationError("output is missing one or more context projects")
+
+	ordered = [projects_by_name.pop(project) for project in project_order if project in projects_by_name]
+	ordered.extend(projects_by_name[project] for project in sorted(projects_by_name, key=str.casefold))
+	return tuple(ordered)
+
+
+def _parse_claims(
+	value: object, section: str, evidence_projects: dict[str, str], project: str
+) -> tuple[SummaryClaim, ...]:
 	if not isinstance(value, list):
 		raise SummaryOutputValidationError(f"{section} must be an array")
 
@@ -98,19 +150,23 @@ def _parse_claims(value: object, section: str, allowed_refs: set[str]) -> tuple[
 		if not isinstance(item, dict) or set(item) != {"text", "evidence"}:
 			raise SummaryOutputValidationError(f"{section} claims must contain only text and evidence")
 		text = _normalized_text(item["text"], MAX_CLAIM_CHARS, f"{section} claim text")
-		evidence = _parse_evidence(item["evidence"], allowed_refs, section)
+		evidence = _parse_evidence(item["evidence"], evidence_projects, project, section)
 		claims.append(SummaryClaim(text=text, evidence=evidence))
 	return tuple(claims)
 
 
-def _parse_evidence(value: object, allowed_refs: set[str], section: str) -> tuple[str, ...]:
+def _parse_evidence(
+	value: object, evidence_projects: dict[str, str], project: str, section: str
+) -> tuple[str, ...]:
 	if not isinstance(value, list) or not value:
 		raise SummaryOutputValidationError(f"{section} claims require at least one evidence ref")
 
 	references = []
 	for reference in value:
-		if not isinstance(reference, str) or reference not in allowed_refs:
+		if not isinstance(reference, str) or reference not in evidence_projects:
 			raise SummaryOutputValidationError(f"{section} contains an unknown evidence ref")
+		if evidence_projects[reference] != project:
+			raise SummaryOutputValidationError(f"{section} contains evidence from another project")
 		if reference not in references:
 			references.append(reference)
 	return tuple(references)

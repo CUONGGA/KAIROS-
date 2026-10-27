@@ -156,6 +156,12 @@ claim must cite a ref from the selected context; Kairos attempts one repair, the
 fallback while keeping the Day Report `ready`. Kairos renders Markdown server-side and enforces
 `summary_output_max_chars`.
 
+**Implementation status (2026-10-27):** C.5.3b đã nâng lên `summary_output@2` và
+`summary_context@2`. Output bắt buộc liệt kê mỗi project được chọn đúng một lần; validator kiểm tra
+E-ref tồn tại và thuộc cùng project với claim. Context Builder deduplicate theo project và chọn Event
+round-robin deterministic giữa các project. Renderer/fallback nhóm theo project. Chi tiết triển khai và
+test gate tại [`C5.3B-MULTI-PROJECT-SUMMARY-PLAN.md`](./C5.3B-MULTI-PROJECT-SUMMARY-PLAN.md).
+
 ## 8. Reliability, provider abstraction và chi phí
 
 Giữ adapter `OpenAICompatibleClient` hiện tại, nhưng tách interface để sau này thêm provider mà không
@@ -270,6 +276,7 @@ Automated tests bắt buộc:
 | P2 — Context Builder | Envelope @1, hash, selection/reduction policy | Deterministic test + budget test pass |
 | P3 — Provenance | DocType migration, metadata, generation cache/idempotency | Regenerate cùng input không gọi model lần hai |
 | P4 — Structured LLM | JSON output contract, evidence validator, retry/fallback | Hallucinated ref/malformed JSON bị xử lý |
+| P4.1 — Multi-project summary | Output @2, project/evidence validator, project-aware selection | 10 project được nhóm độc lập; không cross-project evidence/dedup |
 | P4.5 — Audit snapshot | Validated output + minimal evidence manifest, retention, admin audit API | Claim truy được về Event mà không lưu raw provider/context |
 | P5 — Async + observability | Job queue, Desk state, metrics/log taxonomy | Timeout không block Desk, có dashboard/log |
 | P6 — Multi-collector + evaluation | Git mapper, conformance và golden suite dùng audit snapshot | Collector thứ hai không sửa report schema; quality gate đo được |

@@ -14,12 +14,13 @@ import frappe
 from kairos.quality import sanitize_event_for_llm, sanitize_text
 from kairos.timeline import KAIROS_TZ
 
-CONTEXT_SCHEMA_VERSION = "kairos.summary_context@1"
+CONTEXT_SCHEMA_VERSION = "kairos.summary_context@2"
 DEFAULT_MAX_EVENTS = 150
 DEFAULT_MAX_CHARS = 50_000
 DEDUPE_WINDOW_SECONDS = 10 * 60
 TRUNCATION_MARKER = "…[truncated]"
 METADATA_RESERVE_CHARS = 120
+UNKNOWN_PROJECT = "Không xác định"
 
 
 @dataclass(frozen=True)
@@ -43,9 +44,22 @@ class SummaryContext:
 	deduplicated_count: int
 	truncated_count: int
 	exclusion_reasons: dict[str, int]
+	evidence_index: dict[str, "EvidenceRef"]
+	project_event_counts: dict[str, int]
+	selected_project_counts: dict[str, int]
+	project_order: tuple[str, ...]
 
 	def to_json(self) -> str:
 		return canonical_json(self.envelope)
+
+
+@dataclass(frozen=True)
+class EvidenceRef:
+	"""Server-only identity behind one short reference exposed to the provider."""
+
+	ref: str
+	project: str
+	event_id: str
 
 
 @dataclass(frozen=True)
@@ -109,6 +123,7 @@ def build_summary_context_from_events(
 		if occurred_at is None:
 			reasons["invalid_occurred_at"] += 1
 			continue
+		project = safe_event.project or UNKNOWN_PROJECT
 		candidates.append(
 			_Candidate(
 				occurred_at=occurred_at,
@@ -118,23 +133,31 @@ def build_summary_context_from_events(
 				status=sanitize_text(_value(event, "status"), max_length=40),
 				title=safe_event.title,
 				summary=safe_event.summary,
-				project=safe_event.project,
+				project=project,
 				tags=_safe_tags(_value(event, "tags")),
 			)
 		)
 
 	candidates.sort(key=lambda item: (item.occurred_at, item.event_id))
+	project_event_counts = _project_counts(candidates)
 	deduplicated, duplicate_count = _deduplicate(candidates, policy.dedupe_window_seconds)
 	reasons["duplicate"] += duplicate_count
 
 	selected: list[_Candidate] = []
 	truncated_count = 0
-	for candidate in sorted(deduplicated, key=_selection_key):
+	for candidate in _balanced_candidates(deduplicated):
 		if len(selected) >= policy.max_events:
 			reasons["max_events"] += 1
 			continue
 		fitted, was_truncated = _fit_candidate(
-			candidate, selected, report_date, len(events), policy.max_chars, reasons, truncated_count
+			candidate,
+			selected,
+			report_date,
+			len(events),
+			policy.max_chars,
+			reasons,
+			truncated_count,
+			project_event_counts,
 		)
 		if fitted is None:
 			reasons["max_chars"] += 1
@@ -144,14 +167,27 @@ def build_summary_context_from_events(
 
 	selected.sort(key=lambda item: (item.occurred_at, item.event_id))
 	truncated_count = _truncated_count(selected)
-	envelope = _build_envelope(selected, report_date, len(events), reasons, truncated_count)
+	envelope = _build_envelope(
+		selected, report_date, len(events), reasons, truncated_count, project_event_counts
+	)
 	while selected and len(canonical_json(envelope)) > policy.max_chars:
 		selected.pop()
 		reasons["max_chars"] += 1
 		truncated_count = _truncated_count(selected)
-		envelope = _build_envelope(selected, report_date, len(events), reasons, truncated_count)
+		envelope = _build_envelope(
+			selected, report_date, len(events), reasons, truncated_count, project_event_counts
+		)
 
 	payload = canonical_json(envelope)
+	evidence_index = {
+		event["ref"]: EvidenceRef(
+			ref=event["ref"],
+			project=candidate.project,
+			event_id=candidate.event_id,
+		)
+		for event, candidate in zip(envelope["events"], selected, strict=True)
+	}
+	selected_project_counts = _project_counts(selected)
 	return SummaryContext(
 		envelope=envelope,
 		context_hash=hashlib.sha256(payload.encode("utf-8")).hexdigest(),
@@ -161,6 +197,10 @@ def build_summary_context_from_events(
 		deduplicated_count=duplicate_count,
 		truncated_count=truncated_count,
 		exclusion_reasons=dict(sorted(reasons.items())),
+		evidence_index=evidence_index,
+		project_event_counts=project_event_counts,
+		selected_project_counts=selected_project_counts,
+		project_order=tuple(sorted(selected_project_counts, key=str.casefold)),
 	)
 
 
@@ -171,10 +211,15 @@ def canonical_json(value: object) -> str:
 
 def _deduplicate(candidates: list[_Candidate], window_seconds: int) -> tuple[list[_Candidate], int]:
 	kept: list[_Candidate] = []
-	last_by_signature: dict[tuple[str, str, str], int] = {}
+	last_by_signature: dict[tuple[str, str, str, str], int] = {}
 	duplicates = 0
 	for candidate in candidates:
-		signature = (candidate.source.lower(), candidate.kind.lower(), " ".join(candidate.title.lower().split()))
+		signature = (
+			candidate.project.casefold(),
+			candidate.source.casefold(),
+			candidate.kind.casefold(),
+			" ".join(candidate.title.casefold().split()),
+		)
 		previous_index = last_by_signature.get(signature)
 		if previous_index is not None:
 			previous = kept[previous_index]
@@ -189,6 +234,29 @@ def _deduplicate(candidates: list[_Candidate], window_seconds: int) -> tuple[lis
 	return kept, duplicates
 
 
+def _balanced_candidates(candidates: list[_Candidate]) -> list[_Candidate]:
+	"""Return deterministic round-robin candidates so one project cannot consume the whole budget."""
+	by_project: dict[str, list[_Candidate]] = {}
+	for candidate in candidates:
+		by_project.setdefault(candidate.project, []).append(candidate)
+	for project_candidates in by_project.values():
+		project_candidates.sort(key=_selection_key)
+
+	ordered_projects = sorted(by_project, key=str.casefold)
+	balanced = []
+	position = 0
+	while True:
+		added = False
+		for project in ordered_projects:
+			project_candidates = by_project[project]
+			if position < len(project_candidates):
+				balanced.append(project_candidates[position])
+				added = True
+		if not added:
+			return balanced
+		position += 1
+
+
 def _fit_candidate(
 	candidate: _Candidate,
 	selected: list[_Candidate],
@@ -197,8 +265,17 @@ def _fit_candidate(
 	max_chars: int,
 	reasons: Counter[str],
 	truncated_count: int,
+	project_event_counts: dict[str, int],
 ) -> tuple[_Candidate | None, bool]:
-	if _fits(selected + [candidate], report_date, source_count, max_chars, reasons, truncated_count):
+	if _fits(
+		selected + [candidate],
+		report_date,
+		source_count,
+		max_chars,
+		reasons,
+		truncated_count,
+		project_event_counts,
+	):
 		return candidate, False
 	if not candidate.summary:
 		return None, False
@@ -209,7 +286,15 @@ def _fit_candidate(
 		middle = (low + high) // 2
 		truncated = _truncate(candidate.summary, middle)
 		attempt = replace(candidate, summary=truncated)
-		if _fits(selected + [attempt], report_date, source_count, max_chars, reasons, truncated_count + 1):
+		if _fits(
+			selected + [attempt],
+			report_date,
+			source_count,
+			max_chars,
+			reasons,
+			truncated_count + 1,
+			project_event_counts,
+		):
 			best = attempt
 			low = middle + 1
 		else:
@@ -217,13 +302,22 @@ def _fit_candidate(
 	return (best, best is not None)
 
 
-def _fits(selected, report_date, source_count, max_chars, reasons, truncated_count) -> bool:
-	envelope = _build_envelope(selected, report_date, source_count, reasons, truncated_count)
+def _fits(
+	selected, report_date, source_count, max_chars, reasons, truncated_count, project_event_counts
+) -> bool:
+	envelope = _build_envelope(
+		selected, report_date, source_count, reasons, truncated_count, project_event_counts
+	)
 	return len(canonical_json(envelope)) <= max(1, max_chars - METADATA_RESERVE_CHARS)
 
 
 def _build_envelope(
-	selected, report_date, source_count: int, reasons: Counter[str], truncated_count: int
+	selected,
+	report_date,
+	source_count: int,
+	reasons: Counter[str],
+	truncated_count: int,
+	project_event_counts: dict[str, int],
 ) -> dict:
 	events = []
 	for number, candidate in enumerate(selected, start=1):
@@ -256,8 +350,17 @@ def _build_envelope(
 			"deduplicated_count": reasons.get("duplicate", 0),
 			"truncated_count": truncated_count,
 			"exclusion_reasons": dict(sorted(reasons.items())),
+			"source_project_count": len(project_event_counts),
+			"selected_project_count": len(_project_counts(selected)),
+			"project_event_counts": project_event_counts,
+			"selected_project_counts": _project_counts(selected),
 		},
 	}
+
+
+def _project_counts(candidates: list[_Candidate]) -> dict[str, int]:
+	counts = Counter(candidate.project for candidate in candidates)
+	return dict(sorted(counts.items(), key=lambda item: item[0].casefold()))
 
 
 def _selection_key(candidate: _Candidate) -> tuple[int, datetime, str]:
