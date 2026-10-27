@@ -25,6 +25,7 @@ class TestStructuredSummaryOutput(unittest.TestCase):
 
 		rendered = render_summary_markdown(summary, "2099-12-31", max_chars=1_200)
 
+		self.assertIn("## Báo cáo ngày 2099-12-31", rendered)
 		self.assertIn("Da dong bo Codex. [E001]", rendered)
 		self.assertIn("Can kiem tra session moi. [E002]", rendered)
 

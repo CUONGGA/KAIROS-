@@ -69,7 +69,7 @@ def render_summary_markdown(summary: StructuredSummary, report_date, *, max_char
 		("\u0110ang th\u1ef1c hi\u1ec7n", summary.in_progress),
 		("R\u1ee7i ro / ghi ch\u00fa", summary.risks_or_notes),
 	)
-	lines = [f"## Bao cao ngay {report_date}"]
+	lines = [f"## Báo cáo ngày {report_date}"]
 	for heading, claims in sections:
 		if not claims:
 			continue
