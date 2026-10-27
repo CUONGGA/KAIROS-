@@ -637,9 +637,11 @@ kiểm soát privacy/cost và mở rộng được cho collector mới. Thiết 
 |---|------|----------|----|
 | **C.5.1** | Event quality gate + redaction | Context không chứa raw/secret/path tuyệt đối | [x] |
 | **C.5.2** | Deterministic Context Builder @1 | Context hash, budget và reduction policy có test | [x] |
-| **C.5.3** | Structured output + evidence validation | Claim summary tham chiếu Event ref hợp lệ | [ ] |
-| **C.5.4** | Provenance, cache, async reliability | Metadata/cache đã có; background async còn pending | [ ] |
-| **C.5.5** | Evaluation + collector conformance | Golden suite và collector thứ hai pass | [ ] |
+| **C.5.3** | Structured output + evidence validation | Claim summary tham chiếu Event ref hợp lệ | [x] |
+| **C.5.4a** | Provenance + cache | Metadata, cache/idempotency và stale-input guard | [x] |
+| **C.5.4b** | Validated audit snapshot | Lưu claim đã validate + E-ref → event_id, retention và audit API | [ ] |
+| **C.5.4c** | Async reliability | Background job, retry transient và metrics/log taxonomy | [ ] |
+| **C.5.5** | Evaluation + collector conformance | Golden suite dùng audit snapshot và collector thứ hai pass | [ ] |
 
 **Gate C.5:** ≥95% claim có evidence, không leak secret/raw, fallback không mất report, và summary
 cần sửa tay đáng kể ở ≤20% ngày pilot. Chưa triển khai RAG trong phase này.
@@ -648,6 +650,9 @@ cần sửa tay đáng kể ở ≤20% ngày pilot. Chưa triển khai RAG trong
   date/context/model/prompt, cache hit không gọi lại LLM, Force Regenerate bỏ qua cache, fallback không
   được cache, Redis lock chống gọi trùng và stale context không được ghi đè. Background job/metrics
   của C.5.4 vẫn còn pending.
+- C.5.4b đã được chốt thiết kế: `summary_text` vẫn là bản render/copy; snapshot chỉ lưu JSON đã qua
+  validator và manifest tối thiểu `E-ref → event_id`, không lưu raw provider response, raw payload hoặc
+  full context. Snapshot phải có retention, quyền System Manager và bị xóa khi report là fallback/manual.
 
 ---
 

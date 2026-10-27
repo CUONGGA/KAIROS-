@@ -151,6 +151,11 @@ Server phải validate JSON, giới hạn độ dài, reject evidence ref không
 theo template cố định bằng code. Model không quyết định heading, format hay data retention. Nếu output
 malformed: retry tối đa một lần với repair prompt chỉ chứa output lỗi; vẫn lỗi thì dùng fallback C3.
 
+**Implementation status (2026-10-26):** C.5.3 uses the `kairos.summary_output@1` JSON contract. Every
+claim must cite a ref from the selected context; Kairos attempts one repair, then uses the existing safe
+fallback while keeping the Day Report `ready`. Kairos renders Markdown server-side and enforces
+`summary_output_max_chars`.
+
 ## 8. Reliability, provider abstraction và chi phí
 
 Giữ adapter `OpenAICompatibleClient` hiện tại, nhưng tách interface để sau này thêm provider mà không
@@ -195,13 +200,40 @@ Trước khi triển khai, mở rộng `Kairos Day Report` bằng các field non
 | `context_excluded_count` | số Event loại/cắt |
 | `generation_error_code` | code phân loại nội bộ, không lưu raw provider response |
 
-Không lưu full provider response. Context snapshot sanitized chỉ được thêm sau khi có retention policy,
-permission System Manager và nhu cầu debug thực tế; mặc định chỉ lưu hash + manifest count.
+Không lưu full provider response. C.5.4b sẽ lưu hai audit snapshot **đã qua validator**, khác với việc
+lưu toàn bộ context: `validated_summary_json` chứa các claim/section/evidence ref hợp lệ, còn
+`evidence_manifest_json` chỉ map `E001` tới `event_id`, thời điểm, source và kind của Event nguồn. Hai
+snapshot không được chứa `raw_payload`, full title/summary, session path hoặc secret. Full sanitized context
+snapshot vẫn tắt mặc định và chỉ được cân nhắc sau khi có retention policy, permission System Manager và
+nhu cầu debug thực tế.
 
 Các field trên đã được thêm vào `Kairos Day Report`; triển khai còn thêm `prompt_hash` và
 `generation_key` để prompt sửa trực tiếp cũng làm cache miss. Desk có hai action: Generate Summary dùng
 cache và Force Regenerate chủ động gọi provider lại. Chỉnh tay `summary_text` chuyển
 `generation_mode=manual` và xóa generation key.
+
+### 9.1 C.5.4b — Validated audit snapshot
+
+`summary_text` Markdown vẫn là output đọc/copy cho Desk và Teams, không phải nguồn audit duy nhất. Khi
+và chỉ khi output LLM qua C.5.3 validator, ghi atomically cùng Day Report:
+
+| Field mới | Nội dung |
+| --- | --- |
+| `summary_output_schema_version` | Version của structured output, ví dụ `kairos.summary_output@1` |
+| `validated_summary_json` | Claim đã validate: `sequence`, `section`, `text`, `evidence_refs`, `omissions` |
+| `evidence_manifest_json` | Mapping ref sang identity Event thật, không copy lại nội dung Event |
+| `evidence_claim_count` / `evidence_event_count` | Metric cho audit/evaluation |
+| `audit_snapshot_expires_at` | Mốc scheduler xóa hai snapshot audit |
+
+Context Builder phải giữ manifest nội bộ song song với envelope gửi provider: LLM chỉ thấy `E001`, còn
+server mới thấy `E001 → event_id`. Manifest identity phải tham gia fingerprint/hash generation để cache
+không tái sử dụng evidence của Event khác có cùng nội dung đã sanitize. Fallback, output invalid và report
+chỉnh tay phải clear các snapshot này thay vì lưu snapshot nửa hợp lệ.
+
+Permission API/UI audit chỉ dành cho `System Manager`. Retention mặc định phải được chốt trước migration
+(đề xuất 30 hoặc 90 ngày); cleanup chỉ xóa snapshot audit đã hết hạn, giữ `summary_text`, hash và metadata.
+Không tạo `Kairos Summary Claim` DocType trong C.5.4b. Chỉ tạo sau pilot nếu cần query/dashboard thực tế
+như risk theo tháng hoặc in-progress kéo dài nhiều ngày.
 
 ## 10. Evaluation trước khi rollout
 
@@ -214,6 +246,8 @@ Automated tests bắt buộc:
 - Deterministic ordering/hash, redaction và budget/reduction.
 - Không có `raw_payload`, secret pattern hoặc absolute path trong envelope.
 - Output JSON/evidence validation và malformed-output fallback.
+- Audit snapshot: manifest map đúng ref → Event, fallback/manual không lưu snapshot, retention cleanup và
+  permission endpoint đều đúng.
 - Provider timeout/429/5xx/key missing; Day Report vẫn `ready` ở fallback.
 - Conformance test dùng ít nhất Codex và một collector thứ hai (Git là ứng viên nhẹ nhất).
 
@@ -236,15 +270,17 @@ Automated tests bắt buộc:
 | P2 — Context Builder | Envelope @1, hash, selection/reduction policy | Deterministic test + budget test pass |
 | P3 — Provenance | DocType migration, metadata, generation cache/idempotency | Regenerate cùng input không gọi model lần hai |
 | P4 — Structured LLM | JSON output contract, evidence validator, retry/fallback | Hallucinated ref/malformed JSON bị xử lý |
+| P4.5 — Audit snapshot | Validated output + minimal evidence manifest, retention, admin audit API | Claim truy được về Event mà không lưu raw provider/context |
 | P5 — Async + observability | Job queue, Desk state, metrics/log taxonomy | Timeout không block Desk, có dashboard/log |
-| P6 — Multi-collector | Git mapper + conformance suite | Collector thứ hai không sửa report schema |
+| P6 — Multi-collector + evaluation | Git mapper, conformance và golden suite dùng audit snapshot | Collector thứ hai không sửa report schema; quality gate đo được |
 | P7 — Pilot | 2 tuần shadow/opt-in, review metric/cost | Đạt gate rollout hoặc ghi backlog cải tiến |
 
 ## 12. Quyết định kiến trúc cần chốt trước P1
 
 1. Provider/model khởi đầu và quota chi phí mỗi ngày.
 2. Chính sách redact PII/path: chỉ secret hay cả email, username, branch/repo private.
-3. Có cho phép lưu sanitized context snapshot để audit hay chỉ hash/metadata.
+3. Retention (30/90 ngày), owner và quyền xem cho validated output/evidence manifest; full sanitized context
+   snapshot vẫn tắt mặc định.
 4. Output mặc định: chỉ report ngắn hay thêm mode chi tiết.
 5. Giới hạn retention cho Error Log và generation metadata.
 

@@ -17,6 +17,16 @@ from frappe.tests.utils import FrappeTestCase
 from kairos.api import generate_day_summary, upsert_events
 
 
+ENDPOINT_SUMMARY_JSON = json.dumps(
+	{
+		"done": [{"text": "Da kiem tra endpoint.", "evidence": ["E001"]}],
+		"in_progress": [],
+		"risks_or_notes": [],
+		"omissions": [],
+	}
+)
+
+
 class _EndpointFakeOpenAIHandler(BaseHTTPRequestHandler):
 	def do_POST(self):
 		if self.path != "/v1/chat/completions":
@@ -24,7 +34,8 @@ class _EndpointFakeOpenAIHandler(BaseHTTPRequestHandler):
 			return
 
 		self.server.request_body = self.rfile.read(int(self.headers["Content-Length"]))
-		body = json.dumps({"choices": [{"message": {"content": "- Endpoint E2E summary."}}]}).encode()
+		content = getattr(self.server, "response_content", ENDPOINT_SUMMARY_JSON)
+		body = json.dumps({"choices": [{"message": {"content": content}}]}).encode()
 		self.send_response(200)
 		self.send_header("Content-Type", "application/json")
 		self.send_header("Content-Length", str(len(body)))
@@ -123,6 +134,7 @@ class TestKairosMethodEndpoints(FrappeAPITestCase):
 
 	def setUp(self):
 		super().setUp()
+		self.llm_server.response_content = ENDPOINT_SUMMARY_JSON
 		self.original_collection_enabled = frappe.db.get_single_value(
 			"Kairos Settings", "collection_enabled"
 		)
@@ -191,8 +203,32 @@ class TestKairosMethodEndpoints(FrappeAPITestCase):
 
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.json["message"]["status"], "ready")
-		self.assertEqual(response.json["message"]["summary_text"], "- Endpoint E2E summary.")
+		self.assertIn("Da kiem tra endpoint. [E001]", response.json["message"]["summary_text"])
 		self.assertEqual(response.json["message"]["generation_mode"], "llm")
 		self.assertFalse(response.json["message"]["cache_hit"])
 		request = json.loads(self.llm_server.request_body)
 		self.assertIn('"schema_version":"kairos.summary_context@1"', request["messages"][1]["content"])
+
+	def test_generate_day_summary_endpoint_falls_back_for_invalid_evidence(self):
+		self.assertEqual(self._upsert_event().status_code, 200)
+		self.llm_server.response_content = json.dumps(
+			{
+				"done": [{"text": "Unsupported claim.", "evidence": ["E999"]}],
+				"in_progress": [],
+				"risks_or_notes": [],
+				"omissions": [],
+			}
+		)
+		base_url = f"http://127.0.0.1:{self.llm_server.server_port}/v1"
+		with patch.dict(
+			os.environ,
+			{"KAIROS_LLM_API_KEY": "endpoint-e2e-key", "KAIROS_LLM_BASE_URL": base_url},
+		):
+			response = self.post(
+				self.method("kairos.api.generate_day_summary"),
+				{"sid": self.sid, "report_date": self.report_date},
+			)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.json["message"]["status"], "ready")
+		self.assertEqual(response.json["message"]["generation_mode"], "fallback")
