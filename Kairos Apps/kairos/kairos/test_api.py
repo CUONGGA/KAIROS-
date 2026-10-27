@@ -148,6 +148,7 @@ class TestKairosMethodEndpoints(FrappeAPITestCase):
 		frappe.db.set_single_value(
 			"Kairos Settings", "collection_enabled", self.original_collection_enabled
 		)
+		frappe.db.commit()
 		super().tearDown()
 
 	def _upsert_event(self):
