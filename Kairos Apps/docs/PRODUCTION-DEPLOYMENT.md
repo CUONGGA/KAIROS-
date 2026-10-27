@@ -13,7 +13,7 @@ sẵn sàng production.
 | Thành phần | Hiện trạng | Production readiness |
 | --- | --- | --- |
 | Frappe app | DocType, API ingest, Timeline, Summary, Copy và scheduler đã chạy local | Cần đóng các gate còn lại |
-| Roadmap | C1–C5 hoàn thành; C.5.1–C.5.2 hoàn thành | C.5.3–C.5.5 và Phase D chưa hoàn thành |
+| Roadmap | C1–C5, C.5.1–C.5.3 và C.5.4a hoàn thành | C.5.4b/C.5.4c, C.5.5 và Phase D chưa hoàn thành |
 | Runtime | Hai Bench development trong WSL: LMS và Kairos; Kairos dùng web `8002` | `bench start` không dùng cho production |
 | Collector | Codex collector incremental, checkpoint, batch và Windows Task Scheduler | Cần đổi URL sang HTTPS production và kiểm tra token rotation/retry |
 | Nguồn dữ liệu | Chỉ `codex` là nguồn MVP | Git, Cursor, ChatGPT, terminal vẫn là backlog |
@@ -140,9 +140,9 @@ hồi trước khi go-live.
 
 ### P0 — Đóng gate ứng dụng
 
-- Hoàn thành C.5.3: structured output và evidence validation.
-- Hoàn thành C.5.4: provenance, cache và async reliability.
-- Hoàn thành C.5.5: evaluation suite và collector conformance.
+- Hoàn thành C.5.4b: validated audit snapshot, evidence manifest, retention và admin-only audit access.
+- Hoàn thành C.5.4c: async reliability, retry transient và metrics/log taxonomy.
+- Hoàn thành C.5.5: golden evaluation dùng audit snapshot và collector conformance.
 - Chạy Phase D ít nhất ba ngày làm việc thật.
 - Ghi nhận tỷ lệ fallback, Event rác, latency và mức sửa tay của báo cáo.
 

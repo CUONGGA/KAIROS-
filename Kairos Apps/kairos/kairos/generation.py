@@ -7,6 +7,7 @@ import json
 from dataclasses import dataclass
 
 from kairos.llm_context import CONTEXT_SCHEMA_VERSION, SummaryContext
+from kairos.summary_output import SUMMARY_OUTPUT_SCHEMA_VERSION
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,8 @@ def build_generation_fingerprint(report_date, context: SummaryContext, settings)
 		{
 			"system_prompt": str(settings.day_report_system_prompt or ""),
 			"user_prompt_template": str(settings.day_report_user_prompt_template or ""),
+			"output_schema_version": SUMMARY_OUTPUT_SCHEMA_VERSION,
+			"output_max_chars": getattr(settings, "summary_output_max_chars", None),
 		}
 	)
 	prompt_hash = _sha256(prompt_payload)

@@ -14,6 +14,16 @@ from kairos.llm_context import build_day_context
 from kairos.summary import build_llm_safe_timeline, call_openai_chat_completions, generate_day_report_summary
 
 
+VALID_SUMMARY_JSON = json.dumps(
+	{
+		"done": [{"text": "Hoan thanh tong hop.", "evidence": ["E001"]}],
+		"in_progress": [],
+		"risks_or_notes": [],
+		"omissions": [],
+	}
+)
+
+
 class _FakeOpenAIHandler(BaseHTTPRequestHandler):
 	def do_POST(self):
 		if self.path != "/v1/chat/completions":
@@ -21,7 +31,7 @@ class _FakeOpenAIHandler(BaseHTTPRequestHandler):
 			return
 
 		self.server.request_body = self.rfile.read(int(self.headers["Content-Length"]))
-		body = json.dumps({"choices": [{"message": {"content": "- E2E summary from local LLM."}}]}).encode()
+		body = json.dumps({"choices": [{"message": {"content": VALID_SUMMARY_JSON}}]}).encode()
 		self.send_response(200)
 		self.send_header("Content-Type", "application/json")
 		self.send_header("Content-Length", str(len(body)))
@@ -50,6 +60,8 @@ class TestDayReportSummary(FrappeTestCase):
 	def setUp(self):
 		self.report_date = "2099-12-31"
 		self.external_id = "summary-event-2099"
+		self.llm_key_patcher = patch("kairos.summary.get_llm_api_key", return_value="test-key")
+		self.llm_key_patcher.start()
 		frappe.db.delete("Kairos Event", {"external_id": self.external_id})
 		frappe.db.delete("Kairos Day Report", {"report_date": self.report_date})
 		frappe.get_doc(
@@ -66,17 +78,18 @@ class TestDayReportSummary(FrappeTestCase):
 		).insert(ignore_permissions=True)
 
 	def tearDown(self):
+		self.llm_key_patcher.stop()
 		frappe.db.delete("Kairos Event", {"external_id": self.external_id})
 		frappe.db.delete("Kairos Day Report", {"report_date": self.report_date})
 
-	@patch("kairos.summary.call_openai_chat_completions", return_value="- Completed C2 implementation.")
+	@patch("kairos.summary.call_openai_chat_completions", return_value=VALID_SUMMARY_JSON)
 	def test_generates_and_saves_a_ready_summary(self, mock_completion):
 		result = generate_day_report_summary(self.report_date)
 		report = result.report
 
 		self.assertFalse(result.cache_hit)
 		self.assertEqual(report.status, "ready")
-		self.assertEqual(report.summary_text, "- Completed C2 implementation.")
+		self.assertIn("Hoan thanh tong hop. [E001]", report.summary_text)
 		self.assertEqual(report.generation_mode, "llm")
 		self.assertTrue(report.generation_key)
 		self.assertTrue(report.context_hash)
@@ -107,6 +120,25 @@ class TestDayReportSummary(FrappeTestCase):
 		self.assertEqual(report.generation_error_code, "provider_unavailable")
 		mock_log_error.assert_called_once()
 
+	@patch("kairos.summary.call_openai_chat_completions", side_effect=["not json", VALID_SUMMARY_JSON])
+	def test_repairs_invalid_provider_output_once(self, mock_completion):
+		report = generate_day_report_summary(self.report_date).report
+
+		self.assertEqual(report.generation_mode, "llm")
+		self.assertIn("Hoan thanh tong hop. [E001]", report.summary_text)
+		self.assertEqual(mock_completion.call_count, 2)
+
+	@patch("kairos.summary.frappe.log_error")
+	@patch("kairos.summary.call_openai_chat_completions", side_effect=["not json", "still not json"])
+	def test_uses_fallback_when_repaired_output_is_invalid(self, mock_completion, mock_log_error):
+		report = generate_day_report_summary(self.report_date).report
+
+		self.assertEqual(report.generation_mode, "fallback")
+		self.assertEqual(report.generation_error_code, "invalid_output")
+		self.assertTrue(report.summary_text)
+		self.assertEqual(mock_completion.call_count, 2)
+		mock_log_error.assert_called_once()
+
 	@patch("kairos.summary.frappe.log_error")
 	@patch("kairos.summary.get_llm_api_key", side_effect=frappe.ValidationError("Missing key"))
 	def test_generates_a_fallback_when_llm_key_is_missing(self, _mock_api_key, mock_log_error):
@@ -126,23 +158,23 @@ class TestDayReportSummary(FrappeTestCase):
 			report = generate_day_report_summary(self.report_date).report
 
 		self.assertEqual(report.status, "ready")
-		self.assertEqual(report.summary_text, "- E2E summary from local LLM.")
+		self.assertIn("Hoan thanh tong hop. [E001]", report.summary_text)
 		request = json.loads(self.llm_server.request_body)
 		self.assertEqual(request["model"], frappe.get_single("Kairos Settings").llm_model)
 		self.assertIn("Implement summary generation", request["messages"][1]["content"])
 		self.assertIn('"schema_version":"kairos.summary_context@1"', request["messages"][1]["content"])
 
-	@patch("kairos.summary.call_openai_chat_completions", return_value="Cached summary")
+	@patch("kairos.summary.call_openai_chat_completions", return_value=VALID_SUMMARY_JSON)
 	def test_reuses_successful_summary_for_identical_inputs(self, mock_completion):
 		first = generate_day_report_summary(self.report_date)
 		second = generate_day_report_summary(self.report_date)
 
 		self.assertFalse(first.cache_hit)
 		self.assertTrue(second.cache_hit)
-		self.assertEqual(second.report.summary_text, "Cached summary")
+		self.assertIn("Hoan thanh tong hop. [E001]", second.report.summary_text)
 		self.assertEqual(mock_completion.call_count, 1)
 
-	@patch("kairos.summary.call_openai_chat_completions", return_value="Forced summary")
+	@patch("kairos.summary.call_openai_chat_completions", return_value=VALID_SUMMARY_JSON)
 	def test_force_regenerate_bypasses_cache(self, mock_completion):
 		generate_day_report_summary(self.report_date)
 		result = generate_day_report_summary(self.report_date, force=True)
@@ -150,7 +182,7 @@ class TestDayReportSummary(FrappeTestCase):
 		self.assertFalse(result.cache_hit)
 		self.assertEqual(mock_completion.call_count, 2)
 
-	@patch("kairos.summary.call_openai_chat_completions", return_value="Generated summary")
+	@patch("kairos.summary.call_openai_chat_completions", return_value=VALID_SUMMARY_JSON)
 	def test_manual_edit_of_returned_report_invalidates_cache(self, _mock_completion):
 		report = generate_day_report_summary(self.report_date).report
 		report.summary_text = "Manually edited summary"
@@ -159,7 +191,7 @@ class TestDayReportSummary(FrappeTestCase):
 		self.assertEqual(report.generation_mode, "manual")
 		self.assertFalse(report.generation_key)
 
-	@patch("kairos.summary.call_openai_chat_completions", return_value="Updated summary")
+	@patch("kairos.summary.call_openai_chat_completions", return_value=VALID_SUMMARY_JSON)
 	def test_event_change_invalidates_cache(self, mock_completion):
 		first = generate_day_report_summary(self.report_date)
 		event = frappe.get_doc("Kairos Event", f"codex:{self.external_id}")
@@ -183,18 +215,21 @@ class TestDayReportSummary(FrappeTestCase):
 		self.assertFalse(second.report.generation_key)
 		self.assertEqual(mock_completion.call_count, 2)
 
-	@patch("kairos.summary.call_openai_chat_completions", return_value="Stale summary")
-	def test_does_not_save_result_when_generation_inputs_change(self, _mock_completion):
+	@patch("kairos.summary.call_openai_chat_completions", return_value=VALID_SUMMARY_JSON)
+	@patch("kairos.summary.get_llm_api_key", return_value="test-key")
+	def test_does_not_save_result_when_generation_inputs_change(self, _mock_api_key, _mock_completion):
 		initial_context = build_day_context(self.report_date)
 		changed_context = replace(initial_context, context_hash="f" * 64)
 
-		with patch("kairos.summary.build_day_context", side_effect=[initial_context, changed_context]):
+		with patch("kairos.summary.build_day_context", side_effect=[initial_context, changed_context]) as mock_context:
 			with self.assertRaises(frappe.ValidationError):
-				generate_day_report_summary(self.report_date)
+				generate_day_report_summary(self.report_date, force=True)
+
+		self.assertEqual(mock_context.call_count, 2)
 
 		report = frappe.get_doc("Kairos Day Report", self.report_date)
 		self.assertEqual(report.status, "draft")
-		self.assertNotEqual(report.summary_text, "Stale summary")
+		self.assertNotIn("Hoan thanh tong hop.", report.summary_text or "")
 
 	def test_llm_safe_timeline_excludes_raw_payload_and_redacts_event_content(self):
 		frappe.get_doc(

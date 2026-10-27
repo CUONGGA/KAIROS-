@@ -16,6 +16,42 @@ KAIROS_CODEX_BATCH_SIZE=100
 KAIROS_CODEX_TIMEOUT=120
 ```
 
+### Session source on a new machine
+
+`collector.env` is a **per-user WSL configuration file**, not a file under
+`collectors/codex/` and not a file committed to Git. Create it once on each machine at
+`~/.config/kairos/collector.env`. It holds both the Frappe connection values and the path to
+that machine's local Codex data.
+
+Always set `KAIROS_CODEX_SESSIONS_DIR` explicitly. Without it, the runner falls back to
+`$HOME/.codex/sessions`, which is the WSL home directory. That fallback is often stale when
+Codex runs on Windows and writes sessions under the Windows profile instead.
+
+For a Windows Codex installation accessed through WSL, use:
+
+```bash
+KAIROS_CODEX_SESSIONS_DIR="/mnt/c/Users/<windows-user>/.codex/sessions"
+```
+
+For a native Linux Codex installation, use:
+
+```bash
+KAIROS_CODEX_SESSIONS_DIR="$HOME/.codex/sessions"
+```
+
+Before enabling the scheduled task, confirm that the selected directory really contains recent
+`rollout-*.jsonl` files:
+
+```bash
+source ~/.config/kairos/collector.env
+ls -ltR "$KAIROS_CODEX_SESSIONS_DIR" | head -40
+```
+
+If the newest file is older than the activity the user expects to see, the collector cannot create
+new events: Codex has not written that activity to this local source. Check whether the user is
+working in a different Codex runtime or profile. Do not delete the incremental checkpoint just to
+solve this symptom; doing so replays all discovered sessions.
+
 Protect the file and test the runner once:
 
 ```bash
@@ -52,3 +88,16 @@ Inspect the latest WSL log after manually running the task. A successful run con
 `Frappe accepted events` line and finishes with exit code `0`. The log also reports skipped
 unchanged sessions and each accepted batch. Re-running can update an actively changing session;
 stable event IDs prevent duplicate records.
+
+When events look stale, inspect the log before changing data:
+
+```bash
+tail -n 80 ~/.local/state/kairos/codex-sync-$(date +%F).log
+```
+
+| Log result | Meaning and action |
+| --- | --- |
+| `Sessions directory: /home/.../.codex/sessions` unexpectedly | Add or correct `KAIROS_CODEX_SESSIONS_DIR` in `collector.env`, then rerun the task. |
+| `skipped N unchanged`, `Parsed 0`, `Mapped 0` | The scheduler ran, but no local session file changed. Check the actual Codex session directory and its newest file timestamp. |
+| `Parsed > 0`, `Mapped 0` | Codex wrote data, but the current mapper did not consider it a user message or task-completion event. |
+| `Frappe accepted ...` but Desk is old | The data reached Frappe; check the event's `Occurred At` and Desk sorting/filtering. |
