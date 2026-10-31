@@ -651,6 +651,10 @@ Kế hoạch C.5.3b: [`docs/C5.3B-MULTI-PROJECT-SUMMARY-PLAN.md`](./docs/C5.3B-M
 Trước C.5.3b, contract `summary_output@1` chỉ nhóm theo trạng thái và chưa kiểm tra project/evidence.
 Giới hạn đó đã được xử lý bằng context/output schema `@2`.
 
+- 2026-10-31 — Test lại Phase A → C.5: 78/78 test pass (collector 19, Frappe 38, unittest 21). Phát hiện
+  redaction C.5.1 bỏ sót một số dạng secret; chi tiết và trạng thái xử lý trong
+  [`docs/RISK-REGISTER.md`](./docs/RISK-REGISTER.md).
+
 - 2026-10-27 — C.5.3b đã nâng context/output lên schema `@2`: evidence index giữ nội bộ,
   project-aware deduplication, round-robin selection, validator chặn cross-project evidence,
   renderer/fallback nhóm theo project và HTTP E2E cho cả ba endpoint. Toàn bộ 59 test/11 module pass.
